@@ -1,0 +1,30 @@
+# WireGuard Keys and Configs
+keys/
+*.key
+wg0.conf
+
+# Generated Configs
+scripts/setup/*.conf
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Log files
+*.log
+
+# Temporary files
+*.tmp
+*~
+
+# Environment variables
+.env
+
+# Test output
+test-results/
