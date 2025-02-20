@@ -2,6 +2,17 @@
 
 Quick guide for installing and configuring WireGuard VPN on Ubuntu Server VMs.
 
+## Table of Contents
+- [Table of Contents](#table-of-contents)
+- [Installation](#installation)
+- [Key Generation](#key-generation)
+- [Configuration](#configuration)
+  - [HQ Configuration](#hq-configuration)
+  - [Remote Site Configuration](#remote-site-configuration)
+- [Start WireGuard](#start-wireguard)
+- [Quick Tests](#quick-tests)
+- [Common Issues](#common-issues)
+
 ## Installation
 
 ```bash

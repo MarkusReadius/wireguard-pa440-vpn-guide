@@ -2,6 +2,24 @@
 
 Quick guide for configuring PA-440 firewalls in a hub-spoke topology where HQ provides internet for all sites.
 
+## Table of Contents
+- [Table of Contents](#table-of-contents)
+- [HQ PA-440 (Internet Gateway)](#hq-pa-440-internet-gateway)
+  - [Interface Setup](#interface-setup)
+  - [NAT Rules](#nat-rules)
+  - [Security Policies](#security-policies)
+  - [Routes](#routes)
+- [Remote Site PA-440s](#remote-site-pa-440s)
+  - [Interface Setup](#interface-setup-1)
+  - [NAT Rules](#nat-rules-1)
+  - [Security Policies](#security-policies-1)
+  - [Routes](#routes-1)
+- [Quick Validation](#quick-validation)
+  - [1. Test Internet Access](#1-test-internet-access)
+  - [2. Test WireGuard Access](#2-test-wireguard-access)
+  - [3. Check NAT](#3-check-nat)
+- [Common Issues](#common-issues)
+
 ## HQ PA-440 (Internet Gateway)
 
 ### Interface Setup

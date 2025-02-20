@@ -1,6 +1,34 @@
 # Network Configuration Guide
 
-This guide covers the detailed network configuration for both the WireGuard VMs and PA-440 firewalls at each site, with ESXi servers located behind physical PA-440s.
+Guide for configuring network settings for both WireGuard VMs and PA-440 firewalls, with ESXi servers behind physical PA-440s.
+
+## Table of Contents
+- [Table of Contents](#table-of-contents)
+- [Network Overview](#network-overview)
+  - [Site Network Allocations](#site-network-allocations)
+- [Physical Network Setup](#physical-network-setup)
+  - [HQ Site](#hq-site)
+  - [Remote Sites](#remote-sites)
+- [PA-440 Configuration](#pa-440-configuration)
+  - [HQ PA-440 Setup](#hq-pa-440-setup)
+  - [Remote Site PA-440 Setup](#remote-site-pa-440-setup)
+- [ESXi Network Configuration](#esxi-network-configuration)
+  - [1. Virtual Switch Setup](#1-virtual-switch-setup)
+  - [2. Port Groups](#2-port-groups)
+  - [3. VMkernel Ports](#3-vmkernel-ports)
+- [WireGuard VM Configuration](#wireguard-vm-configuration)
+  - [HQ WireGuard VM](#hq-wireguard-vm)
+  - [Remote Site WireGuard VMs](#remote-site-wireguard-vms)
+- [Routing Configuration](#routing-configuration)
+  - [HQ Site](#hq-site-1)
+  - [Remote Sites](#remote-sites-1)
+- [Testing Procedures](#testing-procedures)
+  - [1. Basic Connectivity](#1-basic-connectivity)
+  - [2. WireGuard Connectivity](#2-wireguard-connectivity)
+  - [3. Internal Network Access](#3-internal-network-access)
+- [Troubleshooting](#troubleshooting)
+  - [Common Issues](#common-issues)
+  - [Diagnostic Commands](#diagnostic-commands)
 
 ## Network Overview
 
@@ -100,20 +128,6 @@ Site 3 (10.83.30.0/24):
    DMZ:
      - Enable: User-ID, Device-ID
      - Interfaces: ethernet1/3
-   ```
-
-3. **NAT Rules**
-   ```
-   Internet Access NAT:
-     Source: LAN, DMZ
-     Destination: WAN
-     Translation: Interface IP
-
-   WireGuard Inbound NAT:
-     Source: Any
-     Destination: [EXTERNAL_IP]
-     Service: UDP/51820
-     Translation: 10.83.40.254
    ```
 
 ### Remote Site PA-440 Setup
@@ -318,17 +332,8 @@ show interface logical
 # From WireGuard VM
 ip route show
 traceroute [TARGET]
-tcpdump -i any udp port 51820
+tcpdump -i wg0
 
 # From ESXi
 esxcli network ip interface list
 esxcli network ip route list
-```
-
-## Next Steps
-
-After completing this guide:
-1. Verify all network segments can communicate
-2. Test routing through WireGuard tunnels
-3. Validate security policies
-4. Proceed to [WireGuard Installation](03-wireguard-installation.md)

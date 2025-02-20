@@ -1,6 +1,29 @@
 # Initial Setup Guide
 
-This guide covers the setup of Ubuntu Server VMs in ESXi for WireGuard VPN deployment, where ESXi servers are located behind physical PA-440 firewalls.
+Guide for setting up Ubuntu Server VMs in ESXi for WireGuard VPN deployment, where ESXi servers are located behind physical PA-440 firewalls.
+
+## Table of Contents
+- [Table of Contents](#table-of-contents)
+- [Network Topology](#network-topology)
+- [ESXi Server Requirements](#esxi-server-requirements)
+  - [Hardware Specifications](#hardware-specifications)
+  - [Network Location](#network-location)
+- [ESXi Installation](#esxi-installation)
+  - [Physical Setup](#physical-setup)
+  - [Network Configuration](#network-configuration)
+  - [Security Configuration](#security-configuration)
+- [WireGuard VM Requirements](#wireguard-vm-requirements)
+  - [Hardware Specifications](#hardware-specifications-1)
+- [Step-by-Step VM Creation](#step-by-step-vm-creation)
+- [Ubuntu Server Installation](#ubuntu-server-installation)
+- [Post-Installation Setup](#post-installation-setup)
+- [Network Interface Configuration](#network-interface-configuration)
+- [Security Considerations](#security-considerations)
+- [Verification Steps](#verification-steps)
+- [Next Steps](#next-steps)
+- [Troubleshooting](#troubleshooting)
+  - [Common Issues](#common-issues)
+  - [Support Commands](#support-commands)
 
 ## Network Topology
 
@@ -24,26 +47,26 @@ Each site consists of:
 
 ## ESXi Installation
 
-1. **Physical Setup**
-   ```
-   - Install ESXi on server hardware
-   - Configure management network in protected segment
-   - Ensure connectivity through PA-440 internal interface
-   ```
+### Physical Setup
+```
+- Install ESXi on server hardware
+- Configure management network in protected segment
+- Ensure connectivity through PA-440 internal interface
+```
 
-2. **Network Configuration**
-   ```
-   - Create VM Network for WireGuard (DMZ segment)
-   - Create Management Network (protected segment)
-   - Configure VLANs if needed
-   ```
+### Network Configuration
+```
+- Create VM Network for WireGuard (DMZ segment)
+- Create Management Network (protected segment)
+- Configure VLANs if needed
+```
 
-3. **Security Configuration**
-   ```
-   - Disable unnecessary services
-   - Configure firewall rules
-   - Set up secure management access
-   ```
+### Security Configuration
+```
+- Disable unnecessary services
+- Configure firewall rules
+- Set up secure management access
+```
 
 ## WireGuard VM Requirements
 

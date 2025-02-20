@@ -2,6 +2,23 @@
 
 Guide for validating the WireGuard VPN setup in a test environment where only HQ has internet access.
 
+## Table of Contents
+- [Table of Contents](#table-of-contents)
+- [Test Environment Architecture](#test-environment-architecture)
+- [Network Flow](#network-flow)
+- [Validation Steps](#validation-steps)
+  - [1. Internet Gateway (HQ)](#1-internet-gateway-hq)
+  - [2. WireGuard Tunnels](#2-wireguard-tunnels)
+  - [3. Inter-Site Communication](#3-inter-site-communication)
+- [Performance Testing](#performance-testing)
+  - [1. Bandwidth Test](#1-bandwidth-test)
+  - [2. Latency Test](#2-latency-test)
+  - [3. Full Path Test](#3-full-path-test)
+- [Validation Checklist](#validation-checklist)
+  - [HQ Site](#hq-site)
+  - [Remote Sites](#remote-sites)
+  - [Performance](#performance)
+
 ## Test Environment Architecture
 
 ```mermaid

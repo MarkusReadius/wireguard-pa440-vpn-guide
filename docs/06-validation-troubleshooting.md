@@ -1,421 +1,273 @@
 # Validation and Troubleshooting Guide
 
-This guide provides comprehensive validation procedures and troubleshooting steps for the WireGuard VPN infrastructure.
+Comprehensive guide for validating and troubleshooting the WireGuard VPN setup.
 
-## System Validation
+## Table of Contents
+- [Table of Contents](#table-of-contents)
+- [Validation Steps](#validation-steps)
+  - [1. Physical Connectivity](#1-physical-connectivity)
+  - [2. ESXi Access](#2-esxi-access)
+  - [3. WireGuard VM Status](#3-wireguard-vm-status)
+  - [4. VPN Connectivity](#4-vpn-connectivity)
+  - [5. Internet Access](#5-internet-access)
+- [Common Issues](#common-issues)
+  - [PA-440 Issues](#pa-440-issues)
+  - [ESXi Issues](#esxi-issues)
+  - [WireGuard Issues](#wireguard-issues)
+  - [Network Issues](#network-issues)
+- [Diagnostic Tools](#diagnostic-tools)
+  - [Network Tools](#network-tools)
+  - [System Tools](#system-tools)
+  - [Log Files](#log-files)
+- [Recovery Procedures](#recovery-procedures)
+  - [WireGuard Recovery](#wireguard-recovery)
+  - [Network Recovery](#network-recovery)
+  - [System Recovery](#system-recovery)
 
-### 1. Component Health Check
+## Validation Steps
 
-#### ESXi Host
+### 1. Physical Connectivity
 ```bash
+# Check PA-440 interfaces
+ping [PA440_LAN_IP]
+ping [PA440_DMZ_IP]
+
+# Verify ESXi connectivity
+ping [ESXI_MGMT_IP]
+```
+
+### 2. ESXi Access
+```bash
+# Test ESXi management
+curl -k https://[ESXI_MGMT_IP]
+ssh root@[ESXI_MGMT_IP]
+
 # Check VM status
-vim-cmd vmsvc/getallvms
-vim-cmd vmsvc/power.getstate [vmid]
-
-# Check resource usage
-esxtop
+esxcli vm process list
 ```
 
-#### Ubuntu VMs
+### 3. WireGuard VM Status
 ```bash
-# System Status
-uptime
-free -h
-df -h
-top
-
-# Service Status
+# Check WireGuard service
 systemctl status wg-quick@wg0
-systemctl status networking
-```
 
-#### PA-440 Firewalls
-```
-> show system info
-> show system resources
-> show interface all
-```
+# Verify interfaces
+ip link show wg0
+ip -d link show wg0
 
-### 2. Network Validation
-
-#### Basic Connectivity
-```bash
-# From WireGuard VMs
-ping -c 4 8.8.8.8
-ping -c 4 [GATEWAY_IP]
-ping -c 4 [PEER_IP]
-
-# From PA-440s
-ping source [INTERFACE] host 8.8.8.8
-ping source [INTERFACE] host [PEER_IP]
-```
-
-#### Route Verification
-```bash
-# On WireGuard VMs
+# Check routing
 ip route show
-ip route get [DESTINATION_IP]
-
-# On PA-440s
-> show routing route
-> show routing summary
+ip route get 8.8.8.8
 ```
 
-#### Interface Status
+### 4. VPN Connectivity
 ```bash
-# On WireGuard VMs
-ip addr show
-ip link show
-ethtool [INTERFACE]
+# Check WireGuard peers
+sudo wg show
 
-# On PA-440s
-> show interface logical
-> show interface hardware
+# Test site connectivity
+for site in 10 20 30 40; do
+    echo "Testing 10.83.${site}.0/24"
+    ping -c 4 10.83.${site}.254
+    traceroute 10.83.${site}.254
+done
 ```
 
-## WireGuard Validation
-
-### 1. Tunnel Status
-
+### 5. Internet Access
 ```bash
-# Check WireGuard interface
-sudo wg show all
+# Test internet connectivity
+ping 8.8.8.8
+traceroute 8.8.8.8
 
-# Expected output format:
-interface: wg0
-  public key: [KEY]
-  private key: (hidden)
-  listening port: 51820
-  
-peer: [PEER_PUBLIC_KEY]
-  endpoint: [PEER_IP]:51820
-  allowed ips: [NETWORK_RANGE]
-  latest handshake: [TIMESTAMP]
-  transfer: [RX_BYTES] received, [TX_BYTES] sent
+# Check NAT
+sudo tcpdump -i any -n 'port 53'
 ```
 
-### 2. Traffic Flow
+## Common Issues
 
+### PA-440 Issues
+1. **NAT Problems**
+   ```
+   - Check NAT policy hits
+   - Verify source/destination translations
+   - Monitor traffic logs
+   ```
+
+2. **Security Policy Issues**
+   ```
+   - Review policy order
+   - Check policy hits
+   - Verify zones and addresses
+   ```
+
+3. **Routing Problems**
+   ```
+   - Verify virtual router configuration
+   - Check static routes
+   - Test next-hop reachability
+   ```
+
+### ESXi Issues
+1. **Management Access**
+   ```
+   - Check network configuration
+   - Verify firewall rules
+   - Test management interface
+   ```
+
+2. **VM Network Issues**
+   ```
+   - Verify vSwitch configuration
+   - Check port group settings
+   - Test VM connectivity
+   ```
+
+### WireGuard Issues
+1. **Tunnel Problems**
+   ```bash
+   # Check WireGuard status
+   sudo wg show
+   sudo systemctl status wg-quick@wg0
+   
+   # View logs
+   sudo journalctl -u wg-quick@wg0
+   ```
+
+2. **Key Issues**
+   ```bash
+   # Verify key permissions
+   ls -l /etc/wireguard/
+   
+   # Check key usage
+   sudo wg show all dump
+   ```
+
+3. **Routing Problems**
+   ```bash
+   # Check routes
+   ip route show table all
+   
+   # Monitor traffic
+   sudo tcpdump -i wg0 -n
+   ```
+
+### Network Issues
+1. **Connectivity Problems**
+   ```bash
+   # Test basic connectivity
+   ping -c 4 [TARGET_IP]
+   
+   # Check routes
+   ip route get [TARGET_IP]
+   
+   # Monitor traffic
+   sudo tcpdump -i any host [TARGET_IP]
+   ```
+
+2. **Performance Issues**
+   ```bash
+   # Test bandwidth
+   iperf3 -c [TARGET_IP]
+   
+   # Check latency
+   mtr -n [TARGET_IP]
+   ```
+
+## Diagnostic Tools
+
+### Network Tools
 ```bash
-# Monitor WireGuard interface
-sudo tcpdump -i wg0 -n
+# Basic connectivity
+ping
+traceroute
+mtr
 
-# Monitor specific peer traffic
-sudo tcpdump -i wg0 host [PEER_IP] -n
+# Traffic analysis
+tcpdump
+wireshark
 
-# Check connection tracking
-sudo conntrack -L
+# Bandwidth testing
+iperf3
 ```
 
-### 3. Performance Testing
-
+### System Tools
 ```bash
-# Bandwidth Test
-iperf3 -s                    # Server
-iperf3 -c [SERVER_IP]        # Client
-
-# Latency Test
-ping -c 100 [PEER_IP] | tail -1
-
-# Path Analysis
-mtr -n [DESTINATION_IP]
-```
-
-## PA-440 Validation
-
-### 1. Security Policy Verification
-
-```
-# Show all security policies
-> show security policy all
-
-# Show specific policy hits
-> show security policy hit-count
-
-# Monitor real-time traffic
-> debug dataplane packet-diag
-```
-
-### 2. NAT Rule Verification
-
-```
-# Show NAT rules
-> show nat all
-
-# Show NAT translations
-> show nat translations
-
-# Clear NAT translations
-> clear nat translations all
-```
-
-### 3. Logging Verification
-
-```
-# Show traffic logs
-> show log traffic
-
-# Show system logs
-> show log system
-
-# Show specific log details
-> show log traffic detail
-```
-
-## Troubleshooting Procedures
-
-### 1. Connectivity Issues
-
-#### WireGuard Connection Problems
-```bash
-# Check WireGuard status
-sudo systemctl status wg-quick@wg0
-
-# Verify interface
-ip addr show wg0
-
-# Check logs
-sudo journalctl -u wg-quick@wg0 -n 100
-
-# Restart service
-sudo systemctl restart wg-quick@wg0
-```
-
-#### Network Path Issues
-```bash
-# Trace route
-traceroute -n [DESTINATION_IP]
-
-# Check MTU
-ping -c 4 -M do -s 1500 [PEER_IP]
-
-# Monitor path
-mtr -n [DESTINATION_IP]
-```
-
-### 2. Performance Issues
-
-#### High Latency
-```bash
-# Monitor network latency
-ping -c 100 [PEER_IP]
-
-# Check system load
+# Process monitoring
 top
-iostat
-vmstat 1
+htop
+ps aux
 
-# Monitor interface
-iftop -i wg0
+# Resource usage
+free -m
+df -h
+vmstat
 ```
 
-#### Bandwidth Problems
+### Log Files
 ```bash
-# Test bandwidth
-iperf3 -c [SERVER_IP] -P 4
+# System logs
+/var/log/syslog
+/var/log/messages
 
-# Monitor traffic
-nethogs wg0
+# WireGuard logs
+journalctl -u wg-quick@wg0
 
-# Check interface stats
-ethtool -S wg0
+# ESXi logs
+/var/log/vmkernel.log
+/var/log/hostd.log
 ```
-
-### 3. Routing Issues
-
-#### Route Problems
-```bash
-# Show routing table
-ip route show table all
-
-# Check specific route
-ip route get [DESTINATION_IP]
-
-# Monitor routing changes
-watch -n1 "ip route show"
-```
-
-#### Firewall Issues
-```bash
-# Check firewall rules
-sudo ufw status verbose
-sudo iptables -L -n -v
-
-# Monitor dropped packets
-sudo tcpdump -i any 'icmp[icmptype] == icmp-unreach'
-```
-
-## Common Issues and Solutions
-
-### 1. Tunnel Won't Establish
-
-#### Symptoms
-- No handshake in `wg show`
-- No traffic flow
-- Ping failures
-
-#### Solutions
-1. Check UDP port 51820 accessibility
-   ```bash
-   nc -vuz [PEER_IP] 51820
-   ```
-
-2. Verify keys and configurations
-   ```bash
-   sudo wg showconf wg0
-   ```
-
-3. Check NAT traversal
-   ```bash
-   sudo tcpdump -i any udp port 51820
-   ```
-
-### 2. Intermittent Connectivity
-
-#### Symptoms
-- Random disconnections
-- Variable latency
-- Packet loss
-
-#### Solutions
-1. Check system resources
-   ```bash
-   top
-   free -h
-   ```
-
-2. Monitor interface errors
-   ```bash
-   watch -n1 "netstat -i"
-   ```
-
-3. Verify MTU settings
-   ```bash
-   ip link set wg0 mtu 1420
-   ```
-
-### 3. Performance Degradation
-
-#### Symptoms
-- Slow throughput
-- High latency
-- CPU spikes
-
-#### Solutions
-1. Check CPU usage
-   ```bash
-   mpstat 1
-   top -H
-   ```
-
-2. Monitor network throughput
-   ```bash
-   iftop -i wg0
-   nethogs wg0
-   ```
-
-3. Verify system tuning
-   ```bash
-   sysctl -a | grep net.ipv4.tcp
-   ```
-
-## Validation Checklist
-
-### Initial Setup
-- [ ] All VMs running
-- [ ] Network interfaces up
-- [ ] Basic connectivity established
-- [ ] DNS resolution working
-
-### WireGuard Configuration
-- [ ] Tunnels established
-- [ ] Keys properly configured
-- [ ] Routes correctly set
-- [ ] Traffic flowing
-
-### PA-440 Configuration
-- [ ] Interfaces configured
-- [ ] Security policies active
-- [ ] NAT rules working
-- [ ] Logging enabled
-
-### Performance
-- [ ] Bandwidth meets requirements
-- [ ] Latency acceptable
-- [ ] No packet loss
-- [ ] CPU usage normal
 
 ## Recovery Procedures
 
-### 1. WireGuard Recovery
-```bash
-# Stop WireGuard
-sudo systemctl stop wg-quick@wg0
+### WireGuard Recovery
+1. **Service Recovery**
+   ```bash
+   sudo systemctl stop wg-quick@wg0
+   sudo systemctl start wg-quick@wg0
+   sudo systemctl status wg-quick@wg0
+   ```
 
-# Backup configuration
-sudo cp /etc/wireguard/wg0.conf /etc/wireguard/wg0.conf.bak
+2. **Configuration Recovery**
+   ```bash
+   # Backup current config
+   sudo cp /etc/wireguard/wg0.conf /etc/wireguard/wg0.conf.bak
+   
+   # Restore from backup
+   sudo cp /etc/wireguard/wg0.conf.bak /etc/wireguard/wg0.conf
+   ```
 
-# Restart service
-sudo systemctl start wg-quick@wg0
-```
+### Network Recovery
+1. **Interface Recovery**
+   ```bash
+   # Reset interface
+   sudo ip link set wg0 down
+   sudo ip link set wg0 up
+   
+   # Verify status
+   ip link show wg0
+   ```
 
-### 2. Network Recovery
-```bash
-# Reset networking
-sudo systemctl restart networking
+2. **Route Recovery**
+   ```bash
+   # Clear routes
+   sudo ip route flush table main
+   
+   # Restore default configuration
+   sudo netplan apply
+   ```
 
-# Flush routing table
-sudo ip route flush table main
+### System Recovery
+1. **Service Recovery**
+   ```bash
+   # Restart networking
+   sudo systemctl restart systemd-networkd
+   
+   # Verify status
+   systemctl status systemd-networkd
+   ```
 
-# Reload configuration
-sudo netplan apply
-```
-
-### 3. System Recovery
-```bash
-# Check system logs
-sudo journalctl -xn 500
-
-# Check resource usage
-htop
-
-# Restart services
-sudo systemctl restart wg-quick@wg0 networking
-```
-
-## Monitoring Setup
-
-### 1. System Monitoring
-```bash
-# Install monitoring tools
-sudo apt install -y prometheus node-exporter
-
-# Configure Prometheus
-sudo nano /etc/prometheus/prometheus.yml
-```
-
-### 2. Network Monitoring
-```bash
-# Install network monitoring
-sudo apt install -y nagios-plugins
-
-# Configure monitoring
-sudo nano /etc/nagios/nrpe.cfg
-```
-
-### 3. Log Monitoring
-```bash
-# Configure log rotation
-sudo nano /etc/logrotate.d/wireguard
-
-# Setup log monitoring
-sudo tail -f /var/log/syslog | grep wg0
-```
-
-## Next Steps
-
-1. Document any custom configurations
-2. Create backup of working configurations
-3. Establish monitoring baseline
-4. Schedule regular maintenance
-5. Train support staff on troubleshooting procedures
+2. **VM Recovery**
+   ```bash
+   # From ESXi
+   vim-cmd vmsvc/power.off [VMID]
+   vim-cmd vmsvc/power.on [VMID]
