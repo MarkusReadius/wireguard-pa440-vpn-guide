@@ -1,16 +1,8 @@
-# WireGuard Multi-Site VPN Setup Guide
+# WireGuard Multi-Site VPN Guide
 
-A comprehensive guide for setting up a 3-4 site WireGuard VPN configuration with Palo Alto PA-440 firewalls in an ESXi environment, where HQ serves as the internet gateway for all sites.
+Guide for setting up a 3-4 site WireGuard VPN behind physical PA-440 firewalls, with HQ providing internet access for all sites.
 
-## Overview
-
-This guide provides detailed instructions for implementing a secure site-to-site VPN solution using:
-- WireGuard VPN
-- Palo Alto PA-440 Firewalls
-- VMware ESXi
-- Ubuntu Server 22.04 LTS
-
-## Network Architecture
+## Network Overview
 
 ```mermaid
 graph TB
@@ -20,26 +12,26 @@ graph TB
 
     subgraph HQ[HQ - 10.83.40.0/24]
         pa440_hq[PA-440]
+        esxi_hq[ESXi]
         wg_hq[WireGuard VM]
-        internal_hq[Internal Network]
     end
 
     subgraph Site1[Site 1 - 10.83.10.0/24]
         pa440_1[PA-440]
+        esxi_1[ESXi]
         wg_1[WireGuard VM]
-        internal_1[Internal Network]
     end
 
     subgraph Site2[Site 2 - 10.83.20.0/24]
         pa440_2[PA-440]
+        esxi_2[ESXi]
         wg_2[WireGuard VM]
-        internal_2[Internal Network]
     end
 
     subgraph Site3[Site 3 - 10.83.30.0/24]
         pa440_3[PA-440]
+        esxi_3[ESXi]
         wg_3[WireGuard VM]
-        internal_3[Internal Network]
     end
 
     inet --- pa440_hq
@@ -47,146 +39,101 @@ graph TB
     pa440_2 -.-> pa440_hq
     pa440_3 -.-> pa440_hq
 
-    pa440_hq --- wg_hq
-    pa440_1 --- wg_1
-    pa440_2 --- wg_2
-    pa440_3 --- wg_3
+    pa440_hq --- esxi_hq
+    pa440_1 --- esxi_1
+    pa440_2 --- esxi_2
+    pa440_3 --- esxi_3
 
-    wg_hq --- internal_hq
-    wg_1 --- internal_1
-    wg_2 --- internal_2
-    wg_3 --- internal_3
-
-    classDef internet fill:#f9f,stroke:#333,stroke-width:2px;
-    classDef site fill:#bbf,stroke:#333,stroke-width:2px;
-    class inet internet;
-    class HQ,Site1,Site2,Site3 site;
+    esxi_hq --- wg_hq
+    esxi_1 --- wg_1
+    esxi_2 --- wg_2
+    esxi_3 --- wg_3
 ```
 
-## Prerequisites
+## Quick Start
 
-1. Hardware Requirements:
-   - PA-440 firewall at each site
-   - ESXi host with sufficient resources
-   - Network connectivity between sites
+1. **Network Setup**
+   - HQ: 10.83.40.0/24 (Internet Gateway)
+   - Site 1: 10.83.10.0/24
+   - Site 2: 10.83.20.0/24
+   - Site 3: 10.83.30.0/24
 
-2. Software Requirements:
-   - VMware ESXi (latest stable version)
-   - Ubuntu Server 22.04 LTS ISO
-   - WireGuard tools
-   - SSH client for management
+2. **Per Site Setup**
+   ```
+   1. Configure PA-440
+      - WAN/Internal interface
+      - LAN interface (x0.1/24)
+      - DMZ interface (x0.2/24)
 
-3. Network Requirements:
-   - Internet connectivity at HQ
-   - Dedicated IP ranges for each site
-   - Required ports open (UDP 51820)
+   2. Setup ESXi
+      - Install in protected network
+      - Configure DMZ network for WireGuard
 
-## Guide Structure
+   3. Deploy WireGuard VM
+      - Ubuntu Server 22.04
+      - DMZ IP: x0.254/24
+   ```
+
+## Documentation
 
 1. [Initial Setup](docs/01-initial-setup.md)
-   - ESXi preparation
-   - VM creation
-   - Ubuntu Server installation
+   - ESXi deployment
+   - Ubuntu VM creation
 
 2. [Network Configuration](docs/02-network-configuration.md)
-   - Interface setup
    - IP addressing
-   - Basic connectivity testing
+   - Network topology
+   - PA-440 setup
 
-3. [WireGuard Installation](docs/03-wireguard-installation.md)
-   - Package installation
-   - Key generation
-   - Configuration file setup
+3. [WireGuard Setup](docs/03-wireguard-installation.md)
+   - Installation
+   - Configuration
+   - Key management
 
 4. [PA-440 Configuration](docs/04-paloalto-configuration.md)
-   - Step-by-step configuration guide
-   - Security policy setup
-   - NAT and routing configuration
-   - Inter-site communication setup
+   - Security zones
+   - NAT rules
+   - Routing
 
-5. [Testing Environment](docs/05-testing-environment.md)
-   - Single internet-connected PA-440 setup
-   - Network simulation
+5. [Testing](docs/05-testing-environment.md)
    - Connectivity validation
+   - Internet access testing
 
-6. [Validation and Troubleshooting](docs/06-validation-troubleshooting.md)
-   - Connectivity tests
-   - Performance validation
-   - Common issues and solutions
+6. [Troubleshooting](docs/06-validation-troubleshooting.md)
+   - Common issues
+   - Verification steps
 
-## Directory Structure
+## Configuration Templates
 
-```
-.
-├── docs\                    # Detailed documentation
-│   └── images\             # Network diagrams and screenshots
-├── config-templates\        # Configuration templates
-│   └── wireguard\          # WireGuard config templates
-└── scripts\                # Helper scripts
-    ├── setup\              # Setup automation
-    └── testing\            # Testing scripts
-```
+- WireGuard configs in `config-templates/wireguard/`
+- Helper scripts in `scripts/`
 
-## WireGuard Configuration
+## Testing
 
-The `config-templates/wireguard` directory contains:
-- Base configuration templates for each site
-- Routing tables
-- Interface configurations
-- Key generation scripts
+1. **Basic Connectivity**
+   ```bash
+   # From WireGuard VMs
+   ping 10.83.x0.1  # Local PA-440
+   ping 10.83.40.254  # HQ WireGuard
+   ```
 
-## Testing Instructions
+2. **Internet Access**
+   ```bash
+   # From remote sites
+   ping 8.8.8.8  # Should route through HQ
+   ```
 
-1. Single Internet-Connected PA-440 Testing:
-   - Configure HQ PA-440 with internet access
-   - Connect remaining sites through HQ
-   - Validate site-to-site connectivity
-   - Test internet access through HQ
+3. **Inter-Site**
+   ```bash
+   # From any site to another
+   ping 10.83.x0.254  # Remote WireGuard
+   ```
 
-2. Multi-Site Testing:
-   - Verify all site-to-site connections
-   - Validate routing through HQ
-   - Test bandwidth and latency
-   - Verify security policies
+## Support
 
-3. Performance Testing:
-   - Bandwidth measurements
-   - Latency testing
-   - Packet loss monitoring
-   - Failover timing
-
-## Troubleshooting Guide
-
-Common issues and solutions are documented in [docs/06-validation-troubleshooting.md](docs/06-validation-troubleshooting.md), including:
-- Connectivity issues
-- Routing problems
-- Key management
-- Performance optimization
-- Security policy troubleshooting
-
-## Maintenance Procedures
-
-1. Regular Tasks:
-   - Key rotation
-   - Configuration backups
-   - Performance monitoring
-   - Security updates
-
-2. Emergency Procedures:
-   - Failover handling
-   - Key compromise response
-   - Network recovery
-   - System restoration
-
-## Support and Documentation
-
-All documentation is available in the `docs` directory:
-- Step-by-step guides
-- Configuration examples
-- Network diagrams
-- Troubleshooting procedures
-- Maintenance checklists
+- Check [Troubleshooting](docs/06-validation-troubleshooting.md)
+- Use `scripts/testing/test-connectivity.sh`
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+MIT License - see [LICENSE](LICENSE)
