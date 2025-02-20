@@ -1,30 +1,8 @@
 # WireGuard Multi-Site VPN Guide
 
-Guide for setting up a 3-4 site WireGuard VPN behind physical PA-440 firewalls, with HQ providing internet access for all sites.
+Setup guide for 3-4 site WireGuard VPN behind PA-440 firewalls, with HQ providing internet for all sites.
 
-## Security Notice
-
-This repository follows security best practices:
-- No sensitive data in configurations (all credentials are placeholders)
-- WireGuard keys must be generated per deployment
-- Secure default configurations
-- Network segmentation with DMZ isolation
-- Principle of least privilege in firewall rules
-
-## Prerequisites
-
-1. **Existing Infrastructure**
-   - ESXi 7.0+ installed and configured
-   - Ubuntu Server 22.04 LTS VMs deployed
-   - PA-440 firewalls with basic connectivity
-
-2. **Network Requirements**
-   - Dedicated IP ranges per site
-   - Internet access at HQ
-   - Inter-site connectivity
-   - UDP 51820 allowed
-
-## Network Architecture
+## Network Overview
 
 ```mermaid
 graph TB
@@ -63,111 +41,136 @@ graph TB
     pa440_3 --- wg_3
 ```
 
-## Repository Structure
+## Prerequisites
 
+- ESXi 7.0+ with Ubuntu 22.04 VMs
+- PA-440 firewalls
+- UDP 51820 allowed
+- Internet at HQ only
+
+## Network Setup
+
+### HQ (10.83.40.0/24)
 ```
-.
-├── docs/                    # Documentation
-│   ├── 01-initial-setup.md     # Network setup
-│   ├── 02-network-config.md    # Network architecture
-│   ├── 03-wireguard.md        # WireGuard setup
-│   ├── 04-paloalto.md         # PA-440 configuration
-│   ├── 05-testing.md          # Testing procedures
-│   └── 06-validation.md       # Validation steps
-│
-├── config-templates/        # Configuration templates
-│   └── wireguard/          # WireGuard configs
-│       ├── wg0-hq.conf         # HQ configuration
-│       ├── wg0-site1.conf      # Site 1 configuration
-│       ├── wg0-site2.conf      # Site 2 configuration
-│       └── wg0-site3.conf      # Site 3 configuration
-│
-└── scripts/                # Helper scripts
-    ├── setup/              # Setup automation
-    │   └── generate-wireguard-config.sh
-    └── testing/            # Testing tools
-        └── test-connectivity.sh
+PA-440:
+- WAN: [EXTERNAL_IP]
+- LAN: 10.83.40.1/24
+- DMZ: 10.83.40.2/24
+
+WireGuard VM:
+- DMZ: 10.83.40.254/24
 ```
 
-## Best Practices Implementation
+### Remote Sites (10.83.x0.0/24)
+```
+PA-440:
+- LAN: x0.1/24
+- DMZ: x0.2/24
 
-### 1. Security
-- DMZ isolation for WireGuard VMs
-- Secure default firewall policies
-- Network segmentation
-- Protected management access
-- Regular security patches recommended
+WireGuard VM:
+- DMZ: x0.254/24
+```
 
-### 2. Network Architecture
-- Hub-spoke topology
-- Redundant routing paths
-- DMZ segmentation
-- Protected management networks
-- Scalable addressing scheme
+## Configuration Steps
 
-### 3. Configuration Management
-- Version-controlled configs
-- Template-based deployment
-- No hardcoded credentials
-- Clear documentation
-- Backup procedures
+### 1. PA-440 Setup
 
-## Quick Start
+**HQ PA-440:**
+```
+1. NAT Rules:
+   - Source NAT for all sites
+   - Destination NAT for WireGuard
 
-1. Follow guides in numerical order:
-   ```
-   docs/01-initial-setup.md     # Network setup
-   docs/02-network-config.md    # Configure networking
-   docs/03-wireguard.md        # Setup WireGuard
-   docs/04-paloalto.md         # Configure PA-440s
-   docs/05-testing.md          # Test deployment
-   docs/06-validation.md       # Validate setup
-   ```
+2. Security:
+   - Allow WireGuard (UDP/51820)
+   - Allow inter-site traffic
+   - Allow internet access
+```
 
-2. Use provided scripts:
-   ```bash
-   # Generate WireGuard configs
-   scripts/setup/generate-wireguard-config.sh
+**Remote PA-440s:**
+```
+1. Security:
+   - Allow WireGuard (UDP/51820)
+   - Allow all to HQ
+```
 
-   # Test connectivity
-   scripts/testing/test-connectivity.sh
-   ```
+### 2. WireGuard Setup
+
+**Install:**
+```bash
+sudo apt install wireguard
+```
+
+**Configure:**
+```bash
+# Generate keys
+wg genkey | sudo tee privatekey | wg pubkey | sudo tee publickey
+
+# Enable forwarding
+echo "net.ipv4.ip_forward=1" | sudo tee -a /etc/sysctl.conf
+sudo sysctl -p
+```
+
+**HQ Config (/etc/wireguard/wg0.conf):**
+```ini
+[Interface]
+PrivateKey = [HQ_PRIVATE_KEY]
+Address = 10.83.40.254/32
+ListenPort = 51820
+
+[Peer]
+PublicKey = [SITE1_PUBLIC_KEY]
+AllowedIPs = 10.83.10.0/24
+
+[Peer]
+PublicKey = [SITE2_PUBLIC_KEY]
+AllowedIPs = 10.83.20.0/24
+
+[Peer]
+PublicKey = [SITE3_PUBLIC_KEY]
+AllowedIPs = 10.83.30.0/24
+```
+
+**Remote Config (/etc/wireguard/wg0.conf):**
+```ini
+[Interface]
+PrivateKey = [SITE_PRIVATE_KEY]
+Address = 10.83.x0.254/32
+ListenPort = 51820
+
+[Peer]
+PublicKey = [HQ_PUBLIC_KEY]
+AllowedIPs = 0.0.0.0/0
+Endpoint = [HQ_PUBLIC_IP]:51820
+PersistentKeepalive = 25
+```
+
+### 3. Start WireGuard
+
+```bash
+sudo systemctl enable wg-quick@wg0
+sudo systemctl start wg-quick@wg0
+```
 
 ## Testing
 
-1. Basic Connectivity
-   ```bash
-   # From WireGuard VMs
-   ping 10.83.x0.1  # Local PA-440
-   ping 10.83.40.254  # HQ WireGuard
-   ```
+```bash
+# From remote sites
+ping 8.8.8.8          # Internet
+ping 10.83.40.254     # HQ
+ping 10.83.x0.254     # Other sites
 
-2. Internet Access
-   ```bash
-   # From remote sites
-   ping 8.8.8.8  # Routes through HQ
-   ```
+# Check status
+sudo wg show
+```
 
-3. Inter-Site
-   ```bash
-   # From any site to another
-   ping 10.83.x0.254  # Remote WireGuard
-   ```
+## Support
 
-## Validation
-
-- [x] Security best practices
-- [x] Network isolation
-- [x] Performance optimization
-- [x] Documentation clarity
-- [x] Testing procedures
-- [x] Recovery plans
-
-## Security
-
-Report security issues via:
-1. GitHub Security Advisories
-2. Email: security@example.com
+For issues:
+1. Check WireGuard status
+2. Verify PA-440 rules
+3. Test connectivity
+4. Check routing
 
 ## License
 
