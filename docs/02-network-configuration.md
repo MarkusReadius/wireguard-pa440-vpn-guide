@@ -1,6 +1,6 @@
 # Network Configuration Guide
 
-This guide covers the detailed network configuration for both the WireGuard VMs and PA-440 firewalls at each site, with HQ serving as the internet gateway for all sites.
+This guide covers the detailed network configuration for both the WireGuard VMs and PA-440 firewalls at each site, with ESXi servers located behind physical PA-440s.
 
 ## Network Overview
 
@@ -9,287 +9,326 @@ This guide covers the detailed network configuration for both the WireGuard VMs 
 HQ (10.83.40.0/24) - Internet Gateway:
 - PA-440 WAN: [EXTERNAL_IP]
 - PA-440 LAN: 10.83.40.1/24
-- WireGuard VM WAN: 10.83.40.254/24
+- PA-440 DMZ: 10.83.40.2/24
+- ESXi Management: 10.83.40.10/24
+- WireGuard VM DMZ IP: 10.83.40.254/24
 - Internal Network: 10.83.40.0/24
 
 Site 1 (10.83.10.0/24):
-- PA-440 WAN: [INTERNAL_IP] (No direct internet)
+- PA-440 Internal: [INTERNAL_IP]
 - PA-440 LAN: 10.83.10.1/24
-- WireGuard VM WAN: 10.83.10.254/24
+- PA-440 DMZ: 10.83.10.2/24
+- ESXi Management: 10.83.10.10/24
+- WireGuard VM DMZ IP: 10.83.10.254/24
 - Internal Network: 10.83.10.0/24
 
 Site 2 (10.83.20.0/24):
-- PA-440 WAN: [INTERNAL_IP] (No direct internet)
+- PA-440 Internal: [INTERNAL_IP]
 - PA-440 LAN: 10.83.20.1/24
-- WireGuard VM WAN: 10.83.20.254/24
+- PA-440 DMZ: 10.83.20.2/24
+- ESXi Management: 10.83.20.10/24
+- WireGuard VM DMZ IP: 10.83.20.254/24
 - Internal Network: 10.83.20.0/24
 
 Site 3 (10.83.30.0/24):
-- PA-440 WAN: [INTERNAL_IP] (No direct internet)
+- PA-440 Internal: [INTERNAL_IP]
 - PA-440 LAN: 10.83.30.1/24
-- WireGuard VM WAN: 10.83.30.254/24
+- PA-440 DMZ: 10.83.30.2/24
+- ESXi Management: 10.83.30.10/24
+- WireGuard VM DMZ IP: 10.83.30.254/24
 - Internal Network: 10.83.30.0/24
 ```
 
-## HQ (Internet Gateway) PA-440 Configuration
+## Physical Network Setup
 
-### 1. Interface Configuration
+### HQ Site
+1. **Physical Connections**
+   ```
+   Internet ─── PA-440 WAN
+                  │
+                  ├── LAN (Internal Network)
+                  │   └── ESXi Management
+                  │
+                  └── DMZ
+                      └── WireGuard VM
+   ```
 
-#### WAN Interface (Internet)
+### Remote Sites
+1. **Physical Connections**
+   ```
+   Internal Network ─── PA-440 Internal
+                          │
+                          ├── LAN (Internal Network)
+                          │   └── ESXi Management
+                          │
+                          └── DMZ
+                              └── WireGuard VM
+   ```
+
+## PA-440 Configuration
+
+### HQ PA-440 Setup
+
+1. **Interface Configuration**
+   ```
+   ethernet1/1 (WAN):
+     Type: Layer3
+     Zone: WAN
+     IPv4: [EXTERNAL_IP]/[SUBNET]
+
+   ethernet1/2 (LAN):
+     Type: Layer3
+     Zone: LAN
+     IPv4: 10.83.40.1/24
+
+   ethernet1/3 (DMZ):
+     Type: Layer3
+     Zone: DMZ
+     IPv4: 10.83.40.2/24
+   ```
+
+2. **Security Zones**
+   ```
+   WAN:
+     - Enable: User-ID, Device-ID
+     - Interfaces: ethernet1/1
+
+   LAN:
+     - Enable: User-ID, Device-ID
+     - Interfaces: ethernet1/2
+
+   DMZ:
+     - Enable: User-ID, Device-ID
+     - Interfaces: ethernet1/3
+   ```
+
+3. **NAT Rules**
+   ```
+   Internet Access NAT:
+     Source: LAN, DMZ
+     Destination: WAN
+     Translation: Interface IP
+
+   WireGuard Inbound NAT:
+     Source: Any
+     Destination: [EXTERNAL_IP]
+     Service: UDP/51820
+     Translation: 10.83.40.254
+   ```
+
+### Remote Site PA-440 Setup
+
+1. **Interface Configuration**
+   ```
+   ethernet1/1 (Internal):
+     Type: Layer3
+     Zone: INTERNAL
+     IPv4: [INTERNAL_IP]/24
+
+   ethernet1/2 (LAN):
+     Type: Layer3
+     Zone: LAN
+     IPv4: 10.83.x0.1/24
+
+   ethernet1/3 (DMZ):
+     Type: Layer3
+     Zone: DMZ
+     IPv4: 10.83.x0.2/24
+   ```
+
+2. **Security Zones**
+   ```
+   INTERNAL:
+     - Enable: User-ID, Device-ID
+     - Interfaces: ethernet1/1
+
+   LAN:
+     - Enable: User-ID, Device-ID
+     - Interfaces: ethernet1/2
+
+   DMZ:
+     - Enable: User-ID, Device-ID
+     - Interfaces: ethernet1/3
+   ```
+
+## ESXi Network Configuration
+
+### 1. Virtual Switch Setup
 ```
-Name: ethernet1/1
-Zone: WAN
-Type: Layer3
-IPv4: [EXTERNAL_IP]/[SUBNET]
-Gateway: [ISP_GATEWAY]
-```
-
-#### LAN Interface (Internal)
-```
-Name: ethernet1/2
-Zone: LAN
-Type: Layer3
-IPv4: 10.83.40.1/24
-```
-
-#### DMZ Interface (WireGuard)
-```
-Name: ethernet1/3
-Zone: DMZ
-Type: Layer3
-IPv4: 10.83.40.2/24
-```
-
-### 2. NAT Configuration
-
-```
-1. Internet Access NAT (for all sites):
-   Name: Internet-Access
-   Source Zone: LAN, DMZ
-   Destination Zone: WAN
-   Source Address: 
-     - 10.83.40.0/24
-     - 10.83.10.0/24
-     - 10.83.20.0/24
-     - 10.83.30.0/24
-   Destination: Any
-   Translation: Interface IP
-
-2. WireGuard Inbound NAT:
-   Name: WireGuard-Inbound
-   Source Zone: WAN
-   Destination Zone: DMZ
-   Source: Any
-   Destination: [EXTERNAL_IP]
-   Service: UDP/51820
-   Translation: 10.83.40.254
-```
-
-### 3. Security Policies
-
-```
-1. Allow Internet Access:
-   Name: Allow-Internet
-   Source Zone: LAN, DMZ
-   Destination Zone: WAN
-   Source:
-     - 10.83.40.0/24
-     - 10.83.10.0/24
-     - 10.83.20.0/24
-     - 10.83.30.0/24
-   Destination: Any
-   Service: Any
-   Action: Allow
-
-2. Allow WireGuard:
-   Name: Allow-WireGuard
-   Source Zone: WAN
-   Destination Zone: DMZ
-   Source: Any
-   Destination: 10.83.40.254
-   Service: UDP/51820
-   Action: Allow
-
-3. Allow Inter-Site:
-   Name: Allow-InterSite
-   Source Zone: DMZ
-   Destination Zone: DMZ
-   Source: Any
-   Destination: Any
-   Service: Any
-   Action: Allow
-```
-
-## Remote Site PA-440 Configuration
-
-### 1. Interface Configuration
-
-#### WAN Interface (Internal Network)
-```
-Name: ethernet1/1
-Zone: WAN
-Type: Layer3
-IPv4: [INTERNAL_IP]/24
-Gateway: [HQ_WIREGUARD_IP]  # Route through WireGuard tunnel
-```
-
-#### LAN Interface (Internal)
-```
-Name: ethernet1/2
-Zone: LAN
-Type: Layer3
-IPv4: [SITE_GATEWAY]/24  # (e.g., 10.83.10.1/24 for Site 1)
-```
-
-#### DMZ Interface (WireGuard)
-```
-Name: ethernet1/3
-Zone: DMZ
-Type: Layer3
-IPv4: [DMZ_NETWORK]/24
-```
-
-### 2. Routing Configuration
-
-```
-1. Default Route (Internet via HQ):
-   Destination: 0.0.0.0/0
-   Next Hop: [HQ_WIREGUARD_IP]
-   Interface: ethernet1/2
-
-2. Inter-Site Routes:
-   Destination: [OTHER_SITE_NETWORKS]
-   Next Hop: [HQ_WIREGUARD_IP]
-   Interface: ethernet1/2
+vSwitch0:
+  - Management Network (VLAN if needed)
+  - VM Network - DMZ
+  - VM Network - Internal
 ```
 
-### 3. Security Policies
-
+### 2. Port Groups
 ```
-1. Allow All Traffic to HQ:
-   Name: Allow-To-HQ
-   Source Zone: LAN, DMZ
-   Destination Zone: WAN
-   Source: [SITE_NETWORK]
-   Destination: Any
-   Service: Any
-   Action: Allow
+Management Network:
+  - VLAN: [if required]
+  - Security: MAC address changes, Forged transmits
 
-2. Allow WireGuard:
-   Name: Allow-WireGuard
-   Source Zone: WAN
-   Destination Zone: DMZ
-   Source: Any
-   Destination: [WIREGUARD_IP]
-   Service: UDP/51820
-   Action: Allow
+DMZ Network:
+  - VLAN: [if required]
+  - Security: MAC address changes, Promiscuous mode
+
+Internal Network:
+  - VLAN: [if required]
+  - Security: MAC address changes
 ```
 
-## WireGuard Configuration
-
-### HQ WireGuard Server
+### 3. VMkernel Ports
 ```
-[Interface]
-PrivateKey = [HQ_PRIVATE_KEY]
-Address = 10.83.40.254/32
-ListenPort = 51820
-
-# Site 1
-[Peer]
-PublicKey = [SITE1_PUBLIC_KEY]
-AllowedIPs = 10.83.10.0/24
-Endpoint = [SITE1_INTERNAL_IP]:51820
-PersistentKeepalive = 25
-
-# Site 2
-[Peer]
-PublicKey = [SITE2_PUBLIC_KEY]
-AllowedIPs = 10.83.20.0/24
-Endpoint = [SITE2_INTERNAL_IP]:51820
-PersistentKeepalive = 25
-
-# Site 3
-[Peer]
-PublicKey = [SITE3_PUBLIC_KEY]
-AllowedIPs = 10.83.30.0/24
-Endpoint = [SITE3_INTERNAL_IP]:51820
-PersistentKeepalive = 25
+Management:
+  - Network: Management Network
+  - IP: 10.83.x0.10/24
+  - Gateway: 10.83.x0.1
+  - Services: Management
 ```
 
-### Remote Site WireGuard Configuration
-```
-[Interface]
-PrivateKey = [SITE_PRIVATE_KEY]
-Address = [SITE_WIREGUARD_IP]/32
-ListenPort = 51820
+## WireGuard VM Configuration
 
-# HQ (Internet Gateway)
-[Peer]
-PublicKey = [HQ_PUBLIC_KEY]
-AllowedIPs = 0.0.0.0/0  # Route all traffic through HQ
-Endpoint = [HQ_PUBLIC_IP]:51820
-PersistentKeepalive = 25
+### HQ WireGuard VM
 ```
+DMZ Interface (ens160):
+  IP: 10.83.40.254/24
+  Gateway: 10.83.40.2
+  Routes: Default via PA-440 DMZ
+
+Internal Interface (ens192):
+  IP: 10.83.40.253/24
+  Routes: Internal networks
+```
+
+### Remote Site WireGuard VMs
+```
+DMZ Interface (ens160):
+  IP: 10.83.x0.254/24
+  Gateway: 10.83.x0.2
+  Routes: Default via PA-440 DMZ
+
+Internal Interface (ens192):
+  IP: 10.83.x0.253/24
+  Routes: Internal networks
+```
+
+## Routing Configuration
+
+### HQ Site
+1. **PA-440 Routes**
+   ```
+   Default Route:
+     Next-hop: [ISP_GATEWAY]
+     Interface: ethernet1/1
+
+   Internal Routes:
+     10.83.10.0/24 via 10.83.40.254
+     10.83.20.0/24 via 10.83.40.254
+     10.83.30.0/24 via 10.83.40.254
+   ```
+
+2. **WireGuard Routes**
+   ```
+   Default Route:
+     via 10.83.40.2
+
+   Static Routes:
+     10.83.10.0/24 via wg0
+     10.83.20.0/24 via wg0
+     10.83.30.0/24 via wg0
+   ```
+
+### Remote Sites
+1. **PA-440 Routes**
+   ```
+   Default Route:
+     Next-hop: 10.83.x0.254
+     Interface: ethernet1/3
+
+   Internal Routes:
+     Local network via ethernet1/2
+   ```
+
+2. **WireGuard Routes**
+   ```
+   Default Route:
+     via 10.83.x0.2
+
+   Static Routes:
+     10.83.40.0/24 via wg0
+     [OTHER_SITE_NETWORKS] via wg0
+   ```
 
 ## Testing Procedures
 
 ### 1. Basic Connectivity
 ```bash
-# From remote sites to HQ
-ping 10.83.40.254
+# From WireGuard VMs
+ping -c 4 [PA-440_DMZ_IP]
+ping -c 4 [PA-440_LAN_IP]
 
-# Internet connectivity through HQ
-ping 8.8.8.8
-
-# Inter-site connectivity
-ping [OTHER_SITE_IP]
+# From ESXi
+ping [PA-440_LAN_IP]
+ping [INTERNAL_GATEWAY]
 ```
 
-### 2. Route Verification
+### 2. WireGuard Connectivity
 ```bash
-# Check default route points to HQ
-ip route show default
+# From HQ WireGuard VM
+ping -c 4 10.83.10.254  # Site 1
+ping -c 4 10.83.20.254  # Site 2
+ping -c 4 10.83.30.254  # Site 3
 
-# Verify all traffic routes through HQ
-traceroute 8.8.8.8
+# From Remote WireGuard VMs
+ping -c 4 10.83.40.254  # HQ
 ```
 
-### 3. Bandwidth Testing
+### 3. Internal Network Access
 ```bash
-# Test bandwidth to HQ
-iperf3 -c 10.83.40.254
-
-# Test internet bandwidth
-iperf3 -c [INTERNET_SPEEDTEST_SERVER]
+# From Internal Networks
+ping [REMOTE_SITE_INTERNAL_IP]
+traceroute [REMOTE_SITE_INTERNAL_IP]
 ```
 
 ## Troubleshooting
 
 ### Common Issues
 
-1. **No Internet Access**
-   - Verify HQ NAT rules
-   - Check routing to HQ
-   - Verify WireGuard tunnel status
-   - Check HQ's internet connectivity
+1. **ESXi Management Access**
+   - Verify PA-440 LAN interface configuration
+   - Check VLAN settings if used
+   - Verify management network settings
 
-2. **Inter-Site Issues**
-   - Verify routes through HQ
-   - Check WireGuard configurations
-   - Verify PA-440 security policies
-   - Test HQ connectivity first
+2. **WireGuard Connectivity**
+   - Check PA-440 DMZ interface configuration
+   - Verify NAT rules
+   - Check routing between DMZ and WAN
 
-3. **Performance Issues**
-   - Monitor HQ bandwidth utilization
-   - Check for bottlenecks
-   - Verify MTU settings
-   - Consider QoS policies at HQ
+3. **Internal Network Access**
+   - Verify PA-440 LAN interface configuration
+   - Check routing between LAN and DMZ
+   - Verify security policies
+
+### Diagnostic Commands
+```bash
+# From PA-440
+ping source [INTERFACE] host [TARGET]
+show routing route
+show interface logical
+
+# From WireGuard VM
+ip route show
+traceroute [TARGET]
+tcpdump -i any udp port 51820
+
+# From ESXi
+esxcli network ip interface list
+esxcli network ip route list
+```
 
 ## Next Steps
 
 After completing this guide:
-1. Verify all sites can reach HQ
-2. Test internet access through HQ
-3. Validate inter-site connectivity
-4. Monitor HQ bandwidth utilization
-5. Proceed to [WireGuard Installation](03-wireguard-installation.md)
+1. Verify all network segments can communicate
+2. Test routing through WireGuard tunnels
+3. Validate security policies
+4. Proceed to [WireGuard Installation](03-wireguard-installation.md)

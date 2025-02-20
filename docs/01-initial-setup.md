@@ -1,21 +1,64 @@
 # Initial Setup Guide
 
-This guide covers the setup of Ubuntu Server VMs in ESXi for WireGuard VPN deployment.
+This guide covers the setup of Ubuntu Server VMs in ESXi for WireGuard VPN deployment, where ESXi servers are located behind physical PA-440 firewalls.
 
-## ESXi VM Requirements
+## Network Topology
+
+Each site consists of:
+1. Physical PA-440 firewall with internet connectivity (HQ) or internal connectivity (other sites)
+2. ESXi server in the internal network/DMZ
+3. WireGuard VM running on ESXi
+
+## ESXi Server Requirements
+
+### Hardware Specifications
+- CPU: Sufficient for virtualization
+- RAM: 16GB minimum recommended
+- Storage: 100GB minimum
+- Network: 1Gbps minimum
+
+### Network Location
+- ESXi management interface should be in protected network segment
+- VM network must be accessible through PA-440 DMZ interface
+- Physical network adapters should be properly segregated
+
+## ESXi Installation
+
+1. **Physical Setup**
+   ```
+   - Install ESXi on server hardware
+   - Configure management network in protected segment
+   - Ensure connectivity through PA-440 internal interface
+   ```
+
+2. **Network Configuration**
+   ```
+   - Create VM Network for WireGuard (DMZ segment)
+   - Create Management Network (protected segment)
+   - Configure VLANs if needed
+   ```
+
+3. **Security Configuration**
+   ```
+   - Disable unnecessary services
+   - Configure firewall rules
+   - Set up secure management access
+   ```
+
+## WireGuard VM Requirements
 
 ### Hardware Specifications
 - vCPUs: 2
 - RAM: 4GB
 - Storage: 20GB thin-provisioned
 - Network Adapters: 2
-  - Adapter 1: WAN (Internet/External)
-  - Adapter 2: LAN (Internal Network)
+  - Adapter 1: DMZ Network (WireGuard traffic)
+  - Adapter 2: Internal Network (Local routing)
 
 ## Step-by-Step VM Creation
 
 1. **Log into ESXi Web Interface**
-   - Open browser and navigate to ESXi management IP
+   - Access ESXi management IP through PA-440 internal network
    - Login with administrator credentials
 
 2. **Create New Virtual Machine**
@@ -44,8 +87,8 @@ This guide covers the setup of Ubuntu Server VMs in ESXi for WireGuard VPN deplo
    CPU: 2 vCPU
    Memory: 4 GB
    Hard disk: 20 GB (thin provisioned)
-   Network Adapter 1: WAN Network
-   Network Adapter 2: LAN Network
+   Network Adapter 1: DMZ Network
+   Network Adapter 2: Internal Network
    CD/DVD Drive: Ubuntu 22.04 LTS ISO
    ```
 
@@ -70,13 +113,13 @@ This guide covers the setup of Ubuntu Server VMs in ESXi for WireGuard VPN deplo
 
 3. **Network Configuration**
    ```
-   ens160 (WAN):
-   - DHCP for initial setup
-   - Will be configured static later
+   ens160 (DMZ):
+   - Configure static IP in DMZ segment
+   - Gateway will be PA-440 DMZ interface
 
-   ens192 (LAN):
-   - No configuration during install
-   - Will be configured later
+   ens192 (Internal):
+   - Configure static IP in internal segment
+   - No default gateway on this interface
    ```
 
 4. **Storage Configuration**
@@ -105,13 +148,6 @@ This guide covers the setup of Ubuntu Server VMs in ESXi for WireGuard VPN deplo
    Do not select any additional snaps
    ```
 
-8. **Wait for Installation**
-   ```
-   Allow installation to complete
-   Remove installation media
-   Reboot when prompted
-   ```
-
 ## Post-Installation Setup
 
 1. **Update System**
@@ -130,22 +166,12 @@ This guide covers the setup of Ubuntu Server VMs in ESXi for WireGuard VPN deplo
        traceroute
    ```
 
-3. **Disable Automatic Updates**
-   ```bash
-   sudo nano /etc/apt/apt.conf.d/20auto-upgrades
-   ```
-   Set both values to 0:
-   ```
-   APT::Periodic::Update-Package-Lists "0";
-   APT::Periodic::Unattended-Upgrade "0";
-   ```
-
-4. **Configure Timezone**
+3. **Configure Timezone**
    ```bash
    sudo timedatectl set-timezone America/New_York
    ```
 
-5. **Enable IP Forwarding**
+4. **Enable IP Forwarding**
    ```bash
    sudo nano /etc/sysctl.conf
    ```
@@ -164,7 +190,7 @@ This guide covers the setup of Ubuntu Server VMs in ESXi for WireGuard VPN deplo
    ```bash
    ip a
    ```
-   Note which interface is WAN (ens160) and LAN (ens192)
+   Note which interface is DMZ (ens160) and Internal (ens192)
 
 2. **Configure Netplan**
    ```bash
@@ -175,19 +201,19 @@ This guide covers the setup of Ubuntu Server VMs in ESXi for WireGuard VPN deplo
    network:
      version: 2
      ethernets:
-       ens160:  # WAN Interface
+       ens160:  # DMZ Interface
          dhcp4: no
          addresses:
-           - [WAN_IP]/24
+           - [DMZ_IP]/24
          routes:
            - to: default
-             via: [GATEWAY_IP]
+             via: [PA440_DMZ_IP]
          nameservers:
            addresses: [DNS_SERVERS]
-       ens192:  # LAN Interface
+       ens192:  # Internal Interface
          dhcp4: no
          addresses:
-           - [LAN_IP]/24
+           - [INTERNAL_IP]/24
    ```
 
 3. **Apply Network Configuration**
@@ -196,12 +222,29 @@ This guide covers the setup of Ubuntu Server VMs in ESXi for WireGuard VPN deplo
    sudo netplan apply
    ```
 
+## Security Considerations
+
+1. **ESXi Security**
+   - Place management interface in protected network
+   - Configure ESXi firewall to restrict access
+   - Use secure protocols (HTTPS, SSH)
+   - Regular security patches
+
+2. **VM Network Security**
+   - Isolate DMZ and Internal networks
+   - Use separate port groups
+   - Configure proper VLAN segregation
+   - Monitor traffic between segments
+
 ## Verification Steps
 
 1. **Check Network Connectivity**
    ```bash
-   ping -c 4 8.8.8.8
-   ping -c 4 [GATEWAY_IP]
+   # Test DMZ connectivity
+   ping -c 4 [PA440_DMZ_IP]
+   
+   # Test internal connectivity
+   ping -c 4 [INTERNAL_GATEWAY]
    ```
 
 2. **Verify System Status**
@@ -228,21 +271,21 @@ After completing this guide:
 ### Common Issues
 
 1. **No Network Connectivity**
-   - Verify physical/virtual network connections
-   - Check IP configuration
-   - Verify gateway settings
-   - Check ESXi virtual switch configuration
+   - Verify PA-440 DMZ configuration
+   - Check ESXi virtual switch settings
+   - Verify VM network adapter settings
+   - Check Ubuntu network configuration
 
 2. **SSH Access Issues**
    - Verify SSH service is running
-   - Check firewall settings
+   - Check PA-440 security policies
    - Verify network connectivity
    - Confirm correct credentials
 
 3. **System Update Failures**
-   - Check internet connectivity
+   - Check PA-440 outbound policies
    - Verify DNS settings
-   - Try different package mirrors
+   - Configure proxy if needed
 
 ### Support Commands
 
