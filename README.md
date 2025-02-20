@@ -11,12 +11,64 @@ This repository follows security best practices:
 - Network segmentation with DMZ isolation
 - Principle of least privilege in firewall rules
 
+## Prerequisites
+
+1. **Existing Infrastructure**
+   - ESXi 7.0+ installed and configured
+   - Ubuntu Server 22.04 LTS VMs deployed
+   - PA-440 firewalls with basic connectivity
+
+2. **Network Requirements**
+   - Dedicated IP ranges per site
+   - Internet access at HQ
+   - Inter-site connectivity
+   - UDP 51820 allowed
+
+## Network Architecture
+
+```mermaid
+graph TB
+    subgraph Internet
+        inet[Internet]
+    end
+
+    subgraph HQ[HQ - 10.83.40.0/24]
+        pa440_hq[PA-440]
+        wg_hq[WireGuard VM]
+    end
+
+    subgraph Site1[Site 1 - 10.83.10.0/24]
+        pa440_1[PA-440]
+        wg_1[WireGuard VM]
+    end
+
+    subgraph Site2[Site 2 - 10.83.20.0/24]
+        pa440_2[PA-440]
+        wg_2[WireGuard VM]
+    end
+
+    subgraph Site3[Site 3 - 10.83.30.0/24]
+        pa440_3[PA-440]
+        wg_3[WireGuard VM]
+    end
+
+    inet --- pa440_hq
+    pa440_1 -.-> pa440_hq
+    pa440_2 -.-> pa440_hq
+    pa440_3 -.-> pa440_hq
+
+    pa440_hq --- wg_hq
+    pa440_1 --- wg_1
+    pa440_2 --- wg_2
+    pa440_3 --- wg_3
+```
+
 ## Repository Structure
 
 ```
 .
 ├── docs/                    # Documentation
-│   ├── 01-initial-setup.md     # ESXi and VM setup
+│   ├── 01-initial-setup.md     # Network setup
 │   ├── 02-network-config.md    # Network architecture
 │   ├── 03-wireguard.md        # WireGuard setup
 │   ├── 04-paloalto.md         # PA-440 configuration
@@ -60,47 +112,16 @@ This repository follows security best practices:
 - Clear documentation
 - Backup procedures
 
-### 4. Testing & Validation
-- Comprehensive test plans
-- Performance benchmarks
-- Security validation
-- Troubleshooting guides
-- Recovery procedures
-
-### 5. Documentation
-- Step-by-step guides
-- Network diagrams
-- Configuration examples
-- Troubleshooting steps
-- Best practices
-
-## Prerequisites
-
-1. Hardware Requirements
-   - PA-440 firewalls
-   - ESXi servers
-   - Network infrastructure
-
-2. Software Requirements
-   - ESXi 7.0+
-   - Ubuntu Server 22.04 LTS
-   - WireGuard tools
-
-3. Network Requirements
-   - Dedicated IP ranges
-   - Internet access at HQ
-   - Inter-site connectivity
-
 ## Quick Start
 
 1. Follow guides in numerical order:
    ```
-   docs/01-initial-setup.md
-   docs/02-network-configuration.md
-   docs/03-wireguard-installation.md
-   docs/04-paloalto-configuration.md
-   docs/05-testing-environment.md
-   docs/06-validation-troubleshooting.md
+   docs/01-initial-setup.md     # Network setup
+   docs/02-network-config.md    # Configure networking
+   docs/03-wireguard.md        # Setup WireGuard
+   docs/04-paloalto.md         # Configure PA-440s
+   docs/05-testing.md          # Test deployment
+   docs/06-validation.md       # Validate setup
    ```
 
 2. Use provided scripts:
@@ -141,14 +162,6 @@ This repository follows security best practices:
 - [x] Documentation clarity
 - [x] Testing procedures
 - [x] Recovery plans
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a Pull Request
 
 ## Security
 

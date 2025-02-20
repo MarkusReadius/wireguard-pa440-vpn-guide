@@ -1,29 +1,18 @@
 # Initial Setup Guide
 
-Guide for setting up Ubuntu Server VMs in ESXi for WireGuard VPN deployment, where ESXi servers are located behind physical PA-440 firewalls.
+Guide for configuring WireGuard VPN VMs in an existing ESXi environment behind PA-440 firewalls.
 
 ## Table of Contents
 - [Table of Contents](#table-of-contents)
 - [Network Topology](#network-topology)
-- [ESXi Server Requirements](#esxi-server-requirements)
-  - [Hardware Specifications](#hardware-specifications)
-  - [Network Location](#network-location)
-- [ESXi Installation](#esxi-installation)
-  - [Physical Setup](#physical-setup)
-  - [Network Configuration](#network-configuration)
-  - [Security Configuration](#security-configuration)
+- [Prerequisites](#prerequisites)
+- [Network Requirements](#network-requirements)
+- [VM Network Configuration](#vm-network-configuration)
 - [WireGuard VM Requirements](#wireguard-vm-requirements)
-  - [Hardware Specifications](#hardware-specifications-1)
-- [Step-by-Step VM Creation](#step-by-step-vm-creation)
-- [Ubuntu Server Installation](#ubuntu-server-installation)
-- [Post-Installation Setup](#post-installation-setup)
 - [Network Interface Configuration](#network-interface-configuration)
 - [Security Considerations](#security-considerations)
 - [Verification Steps](#verification-steps)
 - [Next Steps](#next-steps)
-- [Troubleshooting](#troubleshooting)
-  - [Common Issues](#common-issues)
-  - [Support Commands](#support-commands)
 
 ## Network Topology
 
@@ -32,194 +21,92 @@ Each site consists of:
 2. ESXi server in the internal network/DMZ
 3. WireGuard VM running on ESXi
 
-## ESXi Server Requirements
+## Prerequisites
 
-### Hardware Specifications
-- CPU: Sufficient for virtualization
-- RAM: 16GB minimum recommended
-- Storage: 100GB minimum
-- Network: 1Gbps minimum
+1. **Existing Infrastructure**
+   - ESXi 7.0+ installed and configured
+   - Ubuntu Server 22.04 LTS VM deployed
+   - PA-440 firewalls configured with basic connectivity
 
-### Network Location
-- ESXi management interface should be in protected network segment
-- VM network must be accessible through PA-440 DMZ interface
-- Physical network adapters should be properly segregated
+2. **Network Access**
+   - ESXi management access
+   - PA-440 management access
+   - Inter-site connectivity
 
-## ESXi Installation
+## Network Requirements
 
-### Physical Setup
-```
-- Install ESXi on server hardware
-- Configure management network in protected segment
-- Ensure connectivity through PA-440 internal interface
-```
+1. **Network Segments**
+   ```
+   HQ:
+   - DMZ: 10.83.40.0/24
+   - Management: Protected network
+   - WireGuard: DMZ network
 
-### Network Configuration
-```
-- Create VM Network for WireGuard (DMZ segment)
-- Create Management Network (protected segment)
-- Configure VLANs if needed
-```
+   Remote Sites:
+   - DMZ: 10.83.x0.0/24
+   - Management: Protected network
+   - WireGuard: DMZ network
+   ```
 
-### Security Configuration
-```
-- Disable unnecessary services
-- Configure firewall rules
-- Set up secure management access
-```
+2. **Required Ports**
+   ```
+   - UDP 51820 (WireGuard)
+   - Management ports protected
+   ```
+
+## VM Network Configuration
+
+1. **Network Adapters**
+   ```
+   Adapter 1 (DMZ):
+   - Network: DMZ Port Group
+   - Type: VMXNET3
+   - IP: x0.254/24
+
+   Adapter 2 (Internal):
+   - Network: Internal Port Group
+   - Type: VMXNET3
+   - IP: x0.253/24
+   ```
+
+2. **Port Groups**
+   ```
+   DMZ Network:
+   - VLAN: As required
+   - Security: Promiscuous Mode allowed
+   - Forged transmits: As needed
+
+   Internal Network:
+   - VLAN: As required
+   - Standard security
+   ```
 
 ## WireGuard VM Requirements
 
-### Hardware Specifications
-- vCPUs: 2
-- RAM: 4GB
-- Storage: 20GB thin-provisioned
-- Network Adapters: 2
-  - Adapter 1: DMZ Network (WireGuard traffic)
-  - Adapter 2: Internal Network (Local routing)
-
-## Step-by-Step VM Creation
-
-1. **Log into ESXi Web Interface**
-   - Access ESXi management IP through PA-440 internal network
-   - Login with administrator credentials
-
-2. **Create New Virtual Machine**
-   ```
-   a. Right-click host → Create/Register VM
-   b. Select "Create a new virtual machine"
-   c. Click "Next"
-   ```
-
-3. **Name and OS Settings**
-   ```
-   Name: wg-[site]-vpn (e.g., wg-hq-vpn)
-   Compatibility: ESXi 7.0 U2 and later
-   Guest OS family: Linux
-   Guest OS version: Ubuntu Linux (64-bit)
-   ```
-
-4. **Storage Selection**
-   ```
-   Select datastore with sufficient space
-   Click "Next"
-   ```
-
-5. **Hardware Customization**
+1. **System Resources**
    ```
    CPU: 2 vCPU
-   Memory: 4 GB
-   Hard disk: 20 GB (thin provisioned)
-   Network Adapter 1: DMZ Network
-   Network Adapter 2: Internal Network
-   CD/DVD Drive: Ubuntu 22.04 LTS ISO
+   RAM: 4GB
+   Storage: 20GB thin-provisioned
+   Network: 2 adapters (DMZ + Internal)
    ```
 
-6. **Review Settings**
+2. **Network Configuration**
    ```
-   Verify all configurations
-   Click "Finish"
-   ```
+   DMZ Interface:
+   - IP: 10.83.x0.254/24
+   - Gateway: 10.83.x0.2
+   - Routes: Default via PA-440
 
-## Ubuntu Server Installation
-
-1. **Start VM and Boot from ISO**
-   - Power on VM
-   - Open console
-   - Select "Try or Install Ubuntu Server"
-
-2. **Language and Keyboard**
-   ```
-   Select language: English
-   Select keyboard layout: US
-   ```
-
-3. **Network Configuration**
-   ```
-   ens160 (DMZ):
-   - Configure static IP in DMZ segment
-   - Gateway will be PA-440 DMZ interface
-
-   ens192 (Internal):
-   - Configure static IP in internal segment
-   - No default gateway on this interface
-   ```
-
-4. **Storage Configuration**
-   ```
-   Use entire disk
-   Set up as LVM: No
-   Confirm write changes
-   ```
-
-5. **System Configuration**
-   ```
-   Your name: WireGuard Admin
-   Server name: wg-[site]-vpn
-   Username: wgadmin
-   Password: [Strong Password]
-   ```
-
-6. **SSH Server**
-   ```
-   Install OpenSSH server: Yes
-   Import SSH identity: No
-   ```
-
-7. **Featured Server Snaps**
-   ```
-   Do not select any additional snaps
-   ```
-
-## Post-Installation Setup
-
-1. **Update System**
-   ```bash
-   sudo apt update
-   sudo apt upgrade -y
-   ```
-
-2. **Install Essential Packages**
-   ```bash
-   sudo apt install -y \
-       net-tools \
-       tcpdump \
-       iperf3 \
-       mtr \
-       traceroute
-   ```
-
-3. **Configure Timezone**
-   ```bash
-   sudo timedatectl set-timezone America/New_York
-   ```
-
-4. **Enable IP Forwarding**
-   ```bash
-   sudo nano /etc/sysctl.conf
-   ```
-   Uncomment or add:
-   ```
-   net.ipv4.ip_forward=1
-   ```
-   Apply changes:
-   ```bash
-   sudo sysctl -p
+   Internal Interface:
+   - IP: 10.83.x0.253/24
+   - No default gateway
+   - Routes: Internal networks
    ```
 
 ## Network Interface Configuration
 
-1. **Identify Network Interfaces**
-   ```bash
-   ip a
-   ```
-   Note which interface is DMZ (ens160) and Internal (ens192)
-
-2. **Configure Netplan**
-   ```bash
-   sudo nano /etc/netplan/00-installer-config.yaml
-   ```
-   Example configuration:
+1. **Configure Netplan**
    ```yaml
    network:
      version: 2
@@ -239,29 +126,36 @@ Each site consists of:
            - [INTERNAL_IP]/24
    ```
 
-3. **Apply Network Configuration**
+2. **Enable IP Forwarding**
    ```bash
-   sudo netplan try
-   sudo netplan apply
+   # Add to /etc/sysctl.conf
+   net.ipv4.ip_forward=1
+
+   # Apply changes
+   sudo sysctl -p
    ```
 
 ## Security Considerations
 
-1. **ESXi Security**
-   - Place management interface in protected network
-   - Configure ESXi firewall to restrict access
-   - Use secure protocols (HTTPS, SSH)
-   - Regular security patches
+1. **Network Security**
+   ```
+   - DMZ isolation
+   - Protected management
+   - Restricted access
+   - Secure protocols
+   ```
 
-2. **VM Network Security**
-   - Isolate DMZ and Internal networks
-   - Use separate port groups
-   - Configure proper VLAN segregation
-   - Monitor traffic between segments
+2. **VM Security**
+   ```
+   - Minimal services
+   - Regular updates
+   - Secure configurations
+   - Monitoring enabled
+   ```
 
 ## Verification Steps
 
-1. **Check Network Connectivity**
+1. **Network Connectivity**
    ```bash
    # Test DMZ connectivity
    ping -c 4 [PA440_DMZ_IP]
@@ -270,58 +164,17 @@ Each site consists of:
    ping -c 4 [INTERNAL_GATEWAY]
    ```
 
-2. **Verify System Status**
+2. **Route Verification**
    ```bash
-   systemctl status ssh
+   # Check routing
+   ip route show
+   
+   # Verify forwarding
    sysctl net.ipv4.ip_forward
-   ```
-
-3. **Check Interface Configuration**
-   ```bash
-   ip a
-   ip route
    ```
 
 ## Next Steps
 
-After completing this guide:
 1. Proceed to [Network Configuration](02-network-configuration.md)
 2. Document IP addresses and network details
-3. Ensure SSH access is working properly
-
-## Troubleshooting
-
-### Common Issues
-
-1. **No Network Connectivity**
-   - Verify PA-440 DMZ configuration
-   - Check ESXi virtual switch settings
-   - Verify VM network adapter settings
-   - Check Ubuntu network configuration
-
-2. **SSH Access Issues**
-   - Verify SSH service is running
-   - Check PA-440 security policies
-   - Verify network connectivity
-   - Confirm correct credentials
-
-3. **System Update Failures**
-   - Check PA-440 outbound policies
-   - Verify DNS settings
-   - Configure proxy if needed
-
-### Support Commands
-
-```bash
-# Network Diagnostics
-ip a
-ip route
-netstat -rn
-systemctl status networking
-
-# SSH Diagnostics
-systemctl status ssh
-sudo tail -f /var/log/auth.log
-
-# System Logs
-sudo tail -f /var/log/syslog
+3. Prepare for WireGuard configuration
