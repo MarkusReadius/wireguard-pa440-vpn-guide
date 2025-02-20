@@ -66,11 +66,11 @@ graph TB
     wg_2 --- site2_net
     wg_3 --- site3_net
 
-    classDef internet fill:#f9f,stroke:#333,stroke-width:2px;
-    classDef firewall fill:#f96,stroke:#333,stroke-width:2px;
-    classDef esxi fill:#9cf,stroke:#333,stroke-width:2px;
-    classDef wireguard fill:#9f9,stroke:#333,stroke-width:2px;
-    classDef network fill:#fff,stroke:#333,stroke-width:1px;
+    classDef internet fill:#e6e6ff,stroke:#333,stroke-width:2px;
+    classDef firewall fill:#ffcccc,stroke:#333,stroke-width:2px;
+    classDef esxi fill:#cce6ff,stroke:#333,stroke-width:2px;
+    classDef wireguard fill:#ccffcc,stroke:#333,stroke-width:2px;
+    classDef network fill:#f2f2f2,stroke:#333,stroke-width:1px;
 
     class inet internet;
     class pa440_hq,pa440_1,pa440_2,pa440_3 firewall;
