@@ -1,6 +1,6 @@
 # WireGuard Multi-Site VPN Setup Guide
 
-A comprehensive guide for setting up a 3-4 site WireGuard VPN configuration with Palo Alto PA-440 firewalls in an ESXi environment.
+A comprehensive guide for setting up a 3-4 site WireGuard VPN configuration with Palo Alto PA-440 firewalls in an ESXi environment, where HQ serves as the internet gateway for all sites.
 
 ## Overview
 
@@ -43,9 +43,9 @@ graph TB
     end
 
     inet --- pa440_hq
-    inet --- pa440_1
-    inet --- pa440_2
-    inet --- pa440_3
+    pa440_1 -.-> pa440_hq
+    pa440_2 -.-> pa440_hq
+    pa440_3 -.-> pa440_hq
 
     pa440_hq --- wg_hq
     pa440_1 --- wg_1
@@ -56,6 +56,11 @@ graph TB
     wg_1 --- internal_1
     wg_2 --- internal_2
     wg_3 --- internal_3
+
+    classDef internet fill:#f9f,stroke:#333,stroke-width:2px;
+    classDef site fill:#bbf,stroke:#333,stroke-width:2px;
+    class inet internet;
+    class HQ,Site1,Site2,Site3 site;
 ```
 
 ## Prerequisites
@@ -72,7 +77,7 @@ graph TB
    - SSH client for management
 
 3. Network Requirements:
-   - Internet connectivity (at least one site)
+   - Internet connectivity at HQ
    - Dedicated IP ranges for each site
    - Required ports open (UDP 51820)
 
@@ -94,10 +99,10 @@ graph TB
    - Configuration file setup
 
 4. [PA-440 Configuration](docs/04-paloalto-configuration.md)
-   - Interface configuration
-   - Security zones
-   - NAT rules
-   - Security policies
+   - Step-by-step configuration guide
+   - Security policy setup
+   - NAT and routing configuration
+   - Inter-site communication setup
 
 5. [Testing Environment](docs/05-testing-environment.md)
    - Single internet-connected PA-440 setup
@@ -116,41 +121,31 @@ graph TB
 ├── docs\                    # Detailed documentation
 │   └── images\             # Network diagrams and screenshots
 ├── config-templates\        # Configuration templates
-│   ├── wireguard\          # WireGuard config templates
-│   └── paloalto\           # PA-440 config templates
+│   └── wireguard\          # WireGuard config templates
 └── scripts\                # Helper scripts
     ├── setup\              # Setup automation
     └── testing\            # Testing scripts
 ```
 
-## Configuration Templates
+## WireGuard Configuration
 
-The `config-templates` directory contains:
-
-### WireGuard Templates
+The `config-templates/wireguard` directory contains:
 - Base configuration templates for each site
 - Routing tables
 - Interface configurations
 - Key generation scripts
 
-### Palo Alto Templates
-- Security policies
-- NAT rules
-- Interface configurations
-- Zone configurations
-- Route configurations
-
 ## Testing Instructions
 
 1. Single Internet-Connected PA-440 Testing:
-   - Configure one PA-440 with internet access
-   - Connect remaining PA-440s through internal network
+   - Configure HQ PA-440 with internet access
+   - Connect remaining sites through HQ
    - Validate site-to-site connectivity
-   - Test failover scenarios
+   - Test internet access through HQ
 
 2. Multi-Site Testing:
    - Verify all site-to-site connections
-   - Validate routing tables
+   - Validate routing through HQ
    - Test bandwidth and latency
    - Verify security policies
 

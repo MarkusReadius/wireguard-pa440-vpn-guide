@@ -1,49 +1,39 @@
 # Network Configuration Guide
 
-This guide covers the detailed network configuration for both the WireGuard VMs and PA-440 firewalls at each site.
+This guide covers the detailed network configuration for both the WireGuard VMs and PA-440 firewalls at each site, with HQ serving as the internet gateway for all sites.
 
 ## Network Overview
 
 ### Site Network Allocations
 ```
-HQ (10.83.40.0/24):
+HQ (10.83.40.0/24) - Internet Gateway:
 - PA-440 WAN: [EXTERNAL_IP]
 - PA-440 LAN: 10.83.40.1/24
 - WireGuard VM WAN: 10.83.40.254/24
 - Internal Network: 10.83.40.0/24
 
 Site 1 (10.83.10.0/24):
-- PA-440 WAN: [EXTERNAL_IP]
+- PA-440 WAN: [INTERNAL_IP] (No direct internet)
 - PA-440 LAN: 10.83.10.1/24
 - WireGuard VM WAN: 10.83.10.254/24
 - Internal Network: 10.83.10.0/24
 
 Site 2 (10.83.20.0/24):
-- PA-440 WAN: [EXTERNAL_IP]
+- PA-440 WAN: [INTERNAL_IP] (No direct internet)
 - PA-440 LAN: 10.83.20.1/24
 - WireGuard VM WAN: 10.83.20.254/24
 - Internal Network: 10.83.20.0/24
 
 Site 3 (10.83.30.0/24):
-- PA-440 WAN: [EXTERNAL_IP]
+- PA-440 WAN: [INTERNAL_IP] (No direct internet)
 - PA-440 LAN: 10.83.30.1/24
 - WireGuard VM WAN: 10.83.30.254/24
 - Internal Network: 10.83.30.0/24
 ```
 
-## PA-440 Initial Configuration
+## HQ (Internet Gateway) PA-440 Configuration
 
-### 1. Basic Setup
-```
-1. Connect to PA-440 console
-2. Initial configuration:
-   - Management IP
-   - Default gateway
-   - DNS servers
-   - Administrator password
-```
-
-### 2. Interface Configuration
+### 1. Interface Configuration
 
 #### WAN Interface (Internet)
 ```
@@ -59,7 +49,96 @@ Gateway: [ISP_GATEWAY]
 Name: ethernet1/2
 Zone: LAN
 Type: Layer3
-IPv4: [SITE_GATEWAY]/24  # (e.g., 10.83.40.1/24 for HQ)
+IPv4: 10.83.40.1/24
+```
+
+#### DMZ Interface (WireGuard)
+```
+Name: ethernet1/3
+Zone: DMZ
+Type: Layer3
+IPv4: 10.83.40.2/24
+```
+
+### 2. NAT Configuration
+
+```
+1. Internet Access NAT (for all sites):
+   Name: Internet-Access
+   Source Zone: LAN, DMZ
+   Destination Zone: WAN
+   Source Address: 
+     - 10.83.40.0/24
+     - 10.83.10.0/24
+     - 10.83.20.0/24
+     - 10.83.30.0/24
+   Destination: Any
+   Translation: Interface IP
+
+2. WireGuard Inbound NAT:
+   Name: WireGuard-Inbound
+   Source Zone: WAN
+   Destination Zone: DMZ
+   Source: Any
+   Destination: [EXTERNAL_IP]
+   Service: UDP/51820
+   Translation: 10.83.40.254
+```
+
+### 3. Security Policies
+
+```
+1. Allow Internet Access:
+   Name: Allow-Internet
+   Source Zone: LAN, DMZ
+   Destination Zone: WAN
+   Source:
+     - 10.83.40.0/24
+     - 10.83.10.0/24
+     - 10.83.20.0/24
+     - 10.83.30.0/24
+   Destination: Any
+   Service: Any
+   Action: Allow
+
+2. Allow WireGuard:
+   Name: Allow-WireGuard
+   Source Zone: WAN
+   Destination Zone: DMZ
+   Source: Any
+   Destination: 10.83.40.254
+   Service: UDP/51820
+   Action: Allow
+
+3. Allow Inter-Site:
+   Name: Allow-InterSite
+   Source Zone: DMZ
+   Destination Zone: DMZ
+   Source: Any
+   Destination: Any
+   Service: Any
+   Action: Allow
+```
+
+## Remote Site PA-440 Configuration
+
+### 1. Interface Configuration
+
+#### WAN Interface (Internal Network)
+```
+Name: ethernet1/1
+Zone: WAN
+Type: Layer3
+IPv4: [INTERNAL_IP]/24
+Gateway: [HQ_WIREGUARD_IP]  # Route through WireGuard tunnel
+```
+
+#### LAN Interface (Internal)
+```
+Name: ethernet1/2
+Zone: LAN
+Type: Layer3
+IPv4: [SITE_GATEWAY]/24  # (e.g., 10.83.10.1/24 for Site 1)
 ```
 
 #### DMZ Interface (WireGuard)
@@ -70,194 +149,118 @@ Type: Layer3
 IPv4: [DMZ_NETWORK]/24
 ```
 
-### 3. Security Zones
-```
-1. WAN Zone:
-   - Type: Layer3
-   - Enable: User-ID, Device-ID
-
-2. LAN Zone:
-   - Type: Layer3
-   - Enable: User-ID, Device-ID
-
-3. DMZ Zone:
-   - Type: Layer3
-   - Enable: User-ID, Device-ID
-```
-
-### 4. NAT Rules
-
-#### WAN Outbound NAT
-```
-Name: WAN-Outbound
-Source Zone: LAN, DMZ
-Destination Zone: WAN
-Source Address: [SITE_NETWORK]
-Destination Address: Any
-Service: Any
-Translation Type: Dynamic IP And Port
-Translation Address: [EXTERNAL_IP]
-```
-
-#### WireGuard Inbound NAT
-```
-Name: WireGuard-Inbound
-Source Zone: WAN
-Destination Zone: DMZ
-Source Address: Any
-Destination Address: [EXTERNAL_IP]
-Service: UDP/51820
-Translation Type: Static IP
-Translation Address: [WIREGUARD_IP]
-```
-
-### 5. Security Policies
-
-#### Internal to WAN
-```
-Name: Allow-Internal-to-WAN
-Source Zone: LAN
-Destination Zone: WAN
-Source Address: [SITE_NETWORK]
-Destination Address: Any
-Application: Any
-Service: Any
-Action: Allow
-```
-
-#### WireGuard Traffic
-```
-Name: Allow-WireGuard
-Source Zone: WAN
-Destination Zone: DMZ
-Source Address: Any
-Destination Address: [WIREGUARD_IP]
-Application: Any
-Service: UDP/51820
-Action: Allow
-```
-
-#### Internal to WireGuard
-```
-Name: Allow-Internal-to-WireGuard
-Source Zone: LAN
-Destination Zone: DMZ
-Source Address: [SITE_NETWORK]
-Destination Address: [WIREGUARD_IP]
-Application: Any
-Service: Any
-Action: Allow
-```
-
-## WireGuard VM Network Configuration
-
-### 1. Interface Configuration
-
-Edit the Netplan configuration:
-```bash
-sudo nano /etc/netplan/00-installer-config.yaml
-```
-
-Example configuration for HQ:
-```yaml
-network:
-  version: 2
-  ethernets:
-    ens160:  # WAN Interface
-      dhcp4: no
-      addresses:
-        - 10.83.40.254/24  # WireGuard VM IP
-      routes:
-        - to: default
-          via: 10.83.40.1   # PA-440 LAN IP
-      nameservers:
-        addresses: [8.8.8.8, 8.8.4.4]
-    ens192:  # LAN Interface
-      dhcp4: no
-      addresses:
-        - 10.83.40.253/24  # Internal network IP
-```
-
-Apply the configuration:
-```bash
-sudo netplan try
-sudo netplan apply
-```
-
 ### 2. Routing Configuration
 
-Add static routes for other sites:
-```bash
-# Example for HQ - Add to /etc/netplan/00-installer-config.yaml
-network:
-  version: 2
-  ethernets:
-    ens160:
-      routes:
-        - to: 10.83.10.0/24  # Site 1
-          via: 10.83.40.1
-        - to: 10.83.20.0/24  # Site 2
-          via: 10.83.40.1
-        - to: 10.83.30.0/24  # Site 3
-          via: 10.83.40.1
+```
+1. Default Route (Internet via HQ):
+   Destination: 0.0.0.0/0
+   Next Hop: [HQ_WIREGUARD_IP]
+   Interface: ethernet1/2
+
+2. Inter-Site Routes:
+   Destination: [OTHER_SITE_NETWORKS]
+   Next Hop: [HQ_WIREGUARD_IP]
+   Interface: ethernet1/2
 ```
 
-### 3. Firewall Configuration
+### 3. Security Policies
 
-Configure UFW (Uncomplicated Firewall):
-```bash
-# Enable UFW
-sudo ufw enable
+```
+1. Allow All Traffic to HQ:
+   Name: Allow-To-HQ
+   Source Zone: LAN, DMZ
+   Destination Zone: WAN
+   Source: [SITE_NETWORK]
+   Destination: Any
+   Service: Any
+   Action: Allow
 
-# Allow SSH
-sudo ufw allow 22/tcp
-
-# Allow WireGuard
-sudo ufw allow 51820/udp
-
-# Allow internal network traffic
-sudo ufw allow from 10.83.0.0/16
-
-# Enable forwarding
-sudo nano /etc/ufw/sysctl.conf
-# Uncomment:
-# net/ipv4/ip_forward=1
+2. Allow WireGuard:
+   Name: Allow-WireGuard
+   Source Zone: WAN
+   Destination Zone: DMZ
+   Source: Any
+   Destination: [WIREGUARD_IP]
+   Service: UDP/51820
+   Action: Allow
 ```
 
-## Testing Network Configuration
+## WireGuard Configuration
+
+### HQ WireGuard Server
+```
+[Interface]
+PrivateKey = [HQ_PRIVATE_KEY]
+Address = 10.83.40.254/32
+ListenPort = 51820
+
+# Site 1
+[Peer]
+PublicKey = [SITE1_PUBLIC_KEY]
+AllowedIPs = 10.83.10.0/24
+Endpoint = [SITE1_INTERNAL_IP]:51820
+PersistentKeepalive = 25
+
+# Site 2
+[Peer]
+PublicKey = [SITE2_PUBLIC_KEY]
+AllowedIPs = 10.83.20.0/24
+Endpoint = [SITE2_INTERNAL_IP]:51820
+PersistentKeepalive = 25
+
+# Site 3
+[Peer]
+PublicKey = [SITE3_PUBLIC_KEY]
+AllowedIPs = 10.83.30.0/24
+Endpoint = [SITE3_INTERNAL_IP]:51820
+PersistentKeepalive = 25
+```
+
+### Remote Site WireGuard Configuration
+```
+[Interface]
+PrivateKey = [SITE_PRIVATE_KEY]
+Address = [SITE_WIREGUARD_IP]/32
+ListenPort = 51820
+
+# HQ (Internet Gateway)
+[Peer]
+PublicKey = [HQ_PUBLIC_KEY]
+AllowedIPs = 0.0.0.0/0  # Route all traffic through HQ
+Endpoint = [HQ_PUBLIC_IP]:51820
+PersistentKeepalive = 25
+```
+
+## Testing Procedures
 
 ### 1. Basic Connectivity
 ```bash
-# Test internal network
-ping -c 4 [PA-440_LAN_IP]
+# From remote sites to HQ
+ping 10.83.40.254
 
-# Test internet connectivity
-ping -c 4 8.8.8.8
+# Internet connectivity through HQ
+ping 8.8.8.8
 
-# Test DNS resolution
-nslookup google.com
+# Inter-site connectivity
+ping [OTHER_SITE_IP]
 ```
 
-### 2. Routing Verification
+### 2. Route Verification
 ```bash
-# Display routing table
-ip route
+# Check default route points to HQ
+ip route show default
 
-# Check forwarding
-sysctl net.ipv4.ip_forward
-
-# Verify interfaces
-ip addr show
+# Verify all traffic routes through HQ
+traceroute 8.8.8.8
 ```
 
-### 3. Firewall Rules
+### 3. Bandwidth Testing
 ```bash
-# Check UFW status
-sudo ufw status verbose
+# Test bandwidth to HQ
+iperf3 -c 10.83.40.254
 
-# Verify PA-440 NAT rules
-# Access PA-440 web interface
-# Monitor > System > Traffic
+# Test internet bandwidth
+iperf3 -c [INTERNET_SPEEDTEST_SERVER]
 ```
 
 ## Troubleshooting
@@ -265,48 +268,28 @@ sudo ufw status verbose
 ### Common Issues
 
 1. **No Internet Access**
-   - Verify PA-440 WAN configuration
-   - Check NAT rules
-   - Verify default gateway
-   - Check DNS settings
+   - Verify HQ NAT rules
+   - Check routing to HQ
+   - Verify WireGuard tunnel status
+   - Check HQ's internet connectivity
 
-2. **Internal Network Issues**
-   - Verify interface configurations
-   - Check routing tables
-   - Verify firewall rules
-   - Test connectivity between segments
+2. **Inter-Site Issues**
+   - Verify routes through HQ
+   - Check WireGuard configurations
+   - Verify PA-440 security policies
+   - Test HQ connectivity first
 
-3. **Routing Problems**
-   - Verify static routes
-   - Check forwarding settings
-   - Verify PA-440 routing configuration
-   - Test path with traceroute
-
-### Diagnostic Commands
-```bash
-# Network Connectivity
-ping -c 4 [TARGET_IP]
-traceroute [TARGET_IP]
-mtr [TARGET_IP]
-
-# Interface Status
-ip addr show
-ip link show
-ethtool [INTERFACE]
-
-# Routing
-ip route show
-ip route get [TARGET_IP]
-
-# Firewall
-sudo ufw status verbose
-sudo iptables -L -n -v
-```
+3. **Performance Issues**
+   - Monitor HQ bandwidth utilization
+   - Check for bottlenecks
+   - Verify MTU settings
+   - Consider QoS policies at HQ
 
 ## Next Steps
 
 After completing this guide:
-1. Verify all network configurations
-2. Document all IP addresses and routes
-3. Test connectivity between sites
-4. Proceed to [WireGuard Installation](03-wireguard-installation.md)
+1. Verify all sites can reach HQ
+2. Test internet access through HQ
+3. Validate inter-site connectivity
+4. Monitor HQ bandwidth utilization
+5. Proceed to [WireGuard Installation](03-wireguard-installation.md)
