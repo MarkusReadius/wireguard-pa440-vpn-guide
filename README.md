@@ -118,6 +118,78 @@ DMZ: 10.83.30.2
 WireGuard: 10.83.30.254
 ```
 
+## VM Setup in ESXi
+
+### Create Ubuntu VM
+1. **In ESXi Web Interface:**
+   ```
+   VM Options:
+   - Name: wg-[site]-vpn
+   - Guest OS: Ubuntu Linux 64-bit
+   - CPU: 2 vCPU
+   - RAM: 4GB
+   - Disk: 20GB thin provision
+   ```
+
+2. **Add Network Adapters:**
+   ```
+   Adapter 1 (DMZ):
+   - Network: DMZ Port Group
+   - Adapter Type: VMXNET3
+
+   Adapter 2 (Internal):
+   - Network: Internal Port Group
+   - Adapter Type: VMXNET3
+   ```
+
+### Install Ubuntu Server
+1. **Boot from ISO:**
+   ```
+   - Mount Ubuntu 22.04 LTS ISO
+   - Start VM and boot from ISO
+   - Select: "Try or Install Ubuntu Server"
+   ```
+
+2. **Basic Setup:**
+   ```
+   Language: English
+   Keyboard: US
+   Network: Skip (we'll configure later)
+   Storage: Use entire disk
+   Profile:
+     - Name: WireGuard Admin
+     - Server name: wg-[site]-vpn
+     - Username: wgadmin
+     - Password: [Strong Password]
+   SSH: Install OpenSSH server
+   ```
+
+3. **Network Setup:**
+   ```bash
+   # Edit Netplan config
+   sudo nano /etc/netplan/00-installer-config.yaml
+
+   # Add configuration:
+   network:
+     version: 2
+     ethernets:
+       ens160:  # DMZ Interface
+         dhcp4: no
+         addresses: [DMZ_IP/24]
+         routes:
+           - to: default
+             via: [PA440_DMZ_IP]
+         nameservers:
+           addresses: [DNS_SERVERS]
+       ens192:  # Internal Interface
+         dhcp4: no
+         addresses: [INTERNAL_IP/24]
+
+   # Apply config
+   sudo netplan try
+   sudo netplan apply
+   ```
+
 ## Setup Steps
 
 ### 1. HQ PA-440 Setup
