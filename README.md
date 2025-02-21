@@ -1,8 +1,19 @@
-# WireGuard Multi-Site VPN Guide
+# Enterprise WireGuard Site-to-Site VPN Implementation Guide
 
-Step-by-step guide for setting up WireGuard VPN between sites. HQ provides internet for all sites.
+## Overview
 
-## Network Layout
+This guide provides enterprise-grade implementation steps for a hub-spoke WireGuard VPN deployment across multiple sites using PA-440 firewalls and ESXi virtualization. The architecture ensures secure, encrypted communication between sites while maintaining centralized internet access through HQ.
+
+## Security Notice
+
+This implementation follows enterprise security best practices:
+- Network segmentation with DMZ isolation
+- Principle of least privilege
+- Encrypted inter-site communication
+- Centralized internet access control
+- Protected management networks
+
+## Architecture
 
 ```mermaid
 graph TB
@@ -79,352 +90,192 @@ graph TB
     class hq_net,site1_net,site2_net,site3_net network;
 ```
 
-## IP Addresses
+## Network Design
 
-**HQ (10.83.40.0/24)**
-```
-PA-440:
-WAN: Your internet IP
-LAN: 10.83.40.1
-DMZ: 10.83.40.2
+### Address Allocation
 
-WireGuard: 10.83.40.254
-```
+| Site | Network Range | Purpose |
+|------|--------------|----------|
+| HQ | 10.83.40.0/24 | Central hub, internet access |
+| Site 1 | 10.83.10.0/24 | Branch office |
+| Site 2 | 10.83.20.0/24 | Branch office |
+| Site 3 | 10.83.30.0/24 | Branch office |
 
-**Site 1 (10.83.10.0/24)**
-```
-PA-440:
-LAN: 10.83.10.1
-DMZ: 10.83.10.2
+### Key Components
 
-WireGuard: 10.83.10.254
-```
+| Component | Purpose | Configuration |
+|-----------|----------|---------------|
+| PA-440 | Next-gen firewall | Security policies, NAT, routing |
+| ESXi | Virtualization | VM hosting, network isolation |
+| WireGuard VM | VPN endpoint | Ubuntu 22.04 LTS, 2 vCPU, 4GB RAM |
 
-**Site 2 (10.83.20.0/24)**
-```
-PA-440:
-LAN: 10.83.20.1
-DMZ: 10.83.20.2
+## Implementation Steps
 
-WireGuard: 10.83.20.254
-```
+### 1. Infrastructure Preparation
 
-**Site 3 (10.83.30.0/24)**
-```
-PA-440:
-LAN: 10.83.30.1
-DMZ: 10.83.30.2
+1. **ESXi Configuration**
+   - Configure DMZ and Internal port groups
+   - Enable promiscuous mode on DMZ network
+   - Implement resource pools for VPN VMs
 
-WireGuard: 10.83.30.254
-```
+2. **VM Deployment**
+   - Deploy Ubuntu Server 22.04 LTS
+   - Configure dual NICs (DMZ + Internal)
+   - Apply security hardening
 
-## VM Setup in ESXi
+### 2. Security Implementation
 
-### Create Ubuntu VM
-1. **In ESXi Web Interface:**
+1. **PA-440 Configuration**
    ```
-   VM Options:
-   - Name: wg-[site]-vpn
-   - Guest OS: Ubuntu Linux 64-bit
-   - CPU: 2 vCPU
-   - RAM: 4GB
-   - Disk: 20GB thin provision
+   HQ Firewall:
+   - DMZ segmentation
+   - WireGuard port (UDP/51820)
+   - NAT policies
+   - Security rules
+   - Route distribution
+
+   Remote Firewalls:
+   - DMZ segmentation
+   - Security policies
+   - Local route configuration
    ```
 
-2. **Add Network Adapters:**
-   ```
-   Adapter 1 (DMZ):
-   - Network: DMZ Port Group
-   - Adapter Type: VMXNET3
-
-   Adapter 2 (Internal):
-   - Network: Internal Port Group
-   - Adapter Type: VMXNET3
-   ```
-
-### Install Ubuntu Server
-1. **Boot from ISO:**
-   ```
-   - Mount Ubuntu 22.04 LTS ISO
-   - Start VM and boot from ISO
-   - Select: "Try or Install Ubuntu Server"
-   ```
-
-2. **Basic Setup:**
-   ```
-   Language: English
-   Keyboard: US
-   Network: Skip (we'll configure later)
-   Storage: Use entire disk
-   Profile:
-     - Name: WireGuard Admin
-     - Server name: wg-[site]-vpn
-     - Username: wgadmin
-     - Password: [Strong Password]
-   SSH: Install OpenSSH server
-   ```
-
-3. **Network Setup:**
+2. **WireGuard Setup**
    ```bash
-   # Edit Netplan config
-   sudo nano /etc/netplan/00-installer-config.yaml
+   # Security hardening
+   sudo apt update && sudo apt upgrade -y
+   sudo apt install -y wireguard wireguard-tools
 
-   # Add configuration:
-   network:
-     version: 2
-     ethernets:
-       ens160:  # DMZ Interface
-         dhcp4: no
-         addresses: [DMZ_IP/24]
-         routes:
-           - to: default
-             via: [PA440_DMZ_IP]
-         nameservers:
-           addresses: [DNS_SERVERS]
-       ens192:  # Internal Interface
-         dhcp4: no
-         addresses: [INTERNAL_IP/24]
-
-   # Apply config
-   sudo netplan try
-   sudo netplan apply
+   # Key management
+   cd /etc/wireguard
+   umask 077
+   wg genkey | sudo tee privatekey | wg pubkey | sudo tee publickey
    ```
 
-## Setup Steps
+### 3. Network Configuration
 
-### 1. HQ PA-440 Setup
+1. **HQ Configuration**
+   ```ini
+   # /etc/wireguard/wg0.conf
+   [Interface]
+   PrivateKey = [HQ_PRIVATE_KEY]
+   Address = 10.83.40.254/32
+   ListenPort = 51820
+   
+   [Peer]
+   # Site 1
+   PublicKey = [SITE1_PUBLIC_KEY]
+   AllowedIPs = 10.83.10.0/24
+   
+   [Peer]
+   # Site 2
+   PublicKey = [SITE2_PUBLIC_KEY]
+   AllowedIPs = 10.83.20.0/24
+   
+   [Peer]
+   # Site 3
+   PublicKey = [SITE3_PUBLIC_KEY]
+   AllowedIPs = 10.83.30.0/24
+   ```
 
-**Create NAT Rules:**
-```
-Rule 1: Source NAT (Internet Access)
-- Source: Any
-- Destination: Any
-- Translate: Interface IP
+2. **Remote Site Configuration**
+   ```ini
+   # /etc/wireguard/wg0.conf
+   [Interface]
+   PrivateKey = [SITE_PRIVATE_KEY]
+   Address = 10.83.x0.254/32
+   ListenPort = 51820
+   
+   [Peer]
+   PublicKey = [HQ_PUBLIC_KEY]
+   AllowedIPs = 10.83.0.0/16
+   Endpoint = [HQ_PUBLIC_IP]:51820
+   PersistentKeepalive = 25
+   ```
 
-Rule 2: Destination NAT (WireGuard)
-- Source: Any
-- Destination: Your WAN IP, UDP/51820
-- Translate: 10.83.40.254
-```
+## Validation Procedures
 
-**Create Security Rules:**
-```
-Rule 1: Allow WireGuard
-- Source: Any
-- Destination: 10.83.40.254
-- Service: UDP/51820
-- Action: Allow
-
-Rule 2: Allow Internet
-- Source: Any
-- Destination: Any
-- Action: Allow
-```
-
-### 2. Remote PA-440 Setup
-
-**Create Security Rule:**
-```
-Rule 1: Allow All to HQ
-- Source: Any
-- Destination: Any
-- Action: Allow
-```
-
-### 3. WireGuard Setup
-
-**On All Sites:**
+### 1. Security Validation
 ```bash
-# Install WireGuard
-sudo apt update
-sudo apt install -y wireguard
+# Check service status
+sudo systemctl status wg-quick@wg0
 
-# Generate Keys (SAVE THESE!)
-cd /etc/wireguard
-wg genkey | sudo tee privatekey | wg pubkey | sudo tee publickey
-sudo chmod 600 privatekey
+# Verify interface security
+sudo wg show
 
-# Enable Forwarding
-echo "net.ipv4.ip_forward=1" | sudo tee -a /etc/sysctl.conf
-sudo sysctl -p
+# Monitor connections
+sudo tcpdump -i wg0 -n
 ```
 
-### 4. WireGuard Config
-
-**HQ Config File:**
+### 2. Connectivity Testing
 ```bash
-# Create /etc/wireguard/wg0.conf
-[Interface]
-PrivateKey = HQ_PRIVATE_KEY
-Address = 10.83.40.254/32
-ListenPort = 51820
-
-# Site 1
-[Peer]
-PublicKey = SITE1_PUBLIC_KEY
-# Allow traffic to Site 1's network
-AllowedIPs = 10.83.10.0/24
-
-# Site 2
-[Peer]
-PublicKey = SITE2_PUBLIC_KEY
-# Allow traffic to Site 2's network
-AllowedIPs = 10.83.20.0/24
-
-# Site 3
-[Peer]
-PublicKey = SITE3_PUBLIC_KEY
-# Allow traffic to Site 3's network
-AllowedIPs = 10.83.30.0/24
-```
-
-**Site 1 Config File:**
-```bash
-# Create /etc/wireguard/wg0.conf
-[Interface]
-PrivateKey = SITE1_PRIVATE_KEY
-Address = 10.83.10.254/32
-ListenPort = 51820
-
-[Peer]
-PublicKey = HQ_PUBLIC_KEY
-# Allow traffic to HQ and all other sites
-AllowedIPs = 10.83.0.0/16  # Covers all site networks (10.83.x0.0/24)
-Endpoint = HQ_PUBLIC_IP:51820
-PersistentKeepalive = 25
-```
-
-**Site 2 Config File:**
-```bash
-# Create /etc/wireguard/wg0.conf
-[Interface]
-PrivateKey = SITE2_PRIVATE_KEY
-Address = 10.83.20.254/32
-ListenPort = 51820
-
-[Peer]
-PublicKey = HQ_PUBLIC_KEY
-# Allow traffic to HQ and all other sites
-AllowedIPs = 10.83.0.0/16  # Covers all site networks (10.83.x0.0/24)
-Endpoint = HQ_PUBLIC_IP:51820
-PersistentKeepalive = 25
-```
-
-**Site 3 Config File:**
-```bash
-# Create /etc/wireguard/wg0.conf
-[Interface]
-PrivateKey = SITE3_PRIVATE_KEY
-Address = 10.83.30.254/32
-ListenPort = 51820
-
-[Peer]
-PublicKey = HQ_PUBLIC_KEY
-# Allow traffic to HQ and all other sites
-AllowedIPs = 10.83.0.0/16  # Covers all site networks (10.83.x0.0/24)
-Endpoint = HQ_PUBLIC_IP:51820
-PersistentKeepalive = 25
-```
-
-### 5. Start WireGuard
-
-**On All Sites:**
-```bash
-sudo systemctl enable wg-quick@wg0
-sudo systemctl start wg-quick@wg0
-```
-
-## Traffic Flow
-
-### Internet Access
-```
-Remote Site -> HQ -> Internet
-Example: 10.83.10.0/24 -> 10.83.40.254 -> Internet
-```
-
-### Site-to-Site Access
-```
-Site 1 -> HQ -> Site 2
-Example: 10.83.10.0/24 -> 10.83.40.254 -> 10.83.20.0/24
-
-Site 2 -> HQ -> Site 3
-Example: 10.83.20.0/24 -> 10.83.40.254 -> 10.83.30.0/24
-
-Site 3 -> HQ -> Site 1
-Example: 10.83.30.0/24 -> 10.83.40.254 -> 10.83.10.0/24
-```
-
-### Access Summary
-- HQ can reach all sites directly (10.83.10.0/24, 10.83.20.0/24, 10.83.30.0/24)
-- All sites can reach each other through HQ
-- All sites can reach the internet through HQ
-- All traffic between sites is encrypted
-
-## Testing
-
-**From Remote Sites:**
-```bash
-# Test Internet
-ping 8.8.8.8
-
-# Test HQ
-ping 10.83.40.254
-
-# Test Other Sites
-ping 10.83.10.254  # Site 1
-ping 10.83.20.254  # Site 2
-ping 10.83.30.254  # Site 3
-
-# Test Full Connectivity
-for ip in 10.83.{10,20,30,40}.254; do
-    echo "Testing connection to $ip..."
-    ping -c 4 $ip
+# Systematic testing from each site
+for site in 10 20 30 40; do
+    echo "=== Testing 10.83.${site}.0/24 ==="
+    ping -c 4 10.83.${site}.254
+    traceroute 10.83.${site}.254
 done
 ```
 
-## Common Problems
-
-1. **No Internet Access**
-   - Check HQ NAT rules
-   - Verify "AllowedIPs = 0.0.0.0/0" on remote sites
-   - Check WireGuard status: `sudo wg show`
-
-2. **Can't Connect**
-   - Verify UDP/51820 is allowed
-   - Check public/private keys match
-   - Verify endpoint IP is correct
-
-3. **Sites Can't See Each Other**
-   - Check AllowedIPs includes site networks (10.83.0.0/16)
-   - Verify routing is enabled
-   - Check PA-440 security rules
-   - Verify HQ is forwarding traffic between sites
-
-## Quick Fixes
-
-**Restart WireGuard:**
+### 3. Performance Validation
 ```bash
-sudo systemctl restart wg-quick@wg0
+# Bandwidth testing
+iperf3 -c 10.83.40.254 -t 30
+
+# Latency monitoring
+mtr -n -c 100 10.83.40.254
 ```
 
-**Check Status:**
-```bash
-sudo wg show
-sudo systemctl status wg-quick@wg0
-```
+## Monitoring and Maintenance
 
-**View Logs:**
-```bash
-sudo journalctl -u wg-quick@wg0
-```
+### Regular Checks
+1. Service status monitoring
+2. Performance metrics collection
+3. Security log review
+4. Configuration backup
 
-**Verify Routing:**
-```bash
-# Check routes
-ip route show
+### Troubleshooting Procedures
+1. Systematic connectivity testing
+2. Log analysis
+3. Performance monitoring
+4. Security validation
 
-# Monitor traffic
-sudo tcpdump -i wg0 -n
+## Security Considerations
 
-# Check forwarding
-cat /proc/sys/net/ipv4/ip_forward
+1. **Network Security**
+   - DMZ isolation
+   - Firewall rule audit
+   - Traffic monitoring
+   - Access control
+
+2. **System Security**
+   - Regular updates
+   - Security patches
+   - Configuration hardening
+   - Log monitoring
+
+3. **Operational Security**
+   - Change management
+   - Access control
+   - Key rotation
+   - Incident response
+
+## Documentation and Support
+
+1. **Change Management**
+   - Document all changes
+   - Maintain configuration backups
+   - Update network diagrams
+   - Review security policies
+
+2. **Incident Response**
+   - Document procedures
+   - Maintain contact list
+   - Define escalation paths
+   - Regular testing
+
+3. **Maintenance Procedures**
+   - Regular updates
+   - Security patches
+   - Performance monitoring
+   - Configuration backups
